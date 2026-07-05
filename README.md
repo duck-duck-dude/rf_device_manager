@@ -7,55 +7,61 @@
 <p align="center">
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.5%2B-blue.svg" alt="Home Assistant 2026.5+">
+  <a href="https://github.com/Gifford47/rf_device_manager/releases"><img src="https://img.shields.io/github/v/release/Gifford47/rf_device_manager" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License"></a>
 </p>
 
-Vollständige RF-Geräteverwaltung für Home Assistant — **komplett über die Web-UI**.
-RF-Codes erstellen, anlernen, empfangen, bearbeiten, testen, verwalten und senden,
-ohne jemals YAML oder Python anzufassen.
+Full RF device management for Home Assistant — **entirely from the web UI**.
+Create, learn, receive, edit, test, manage and send RF codes without ever
+touching YAML or Python.
 
-Baut auf der **`radio_frequency`-Entity-Plattform aus Home Assistant 2026.5** und dem
-**ESPHome `ir_rf_proxy`** auf (z. B. CC1101-/SX127x-Hardware). Konzeptionell inspiriert
-von [clevrdavid/rf_fan](https://github.com/clevrdavid/rf_fan), funktional erweitert zu
-einer generischen RF-Geräteverwaltung.
+Built on the **`radio_frequency` entity platform introduced in Home Assistant
+2026.5** and the **ESPHome `ir_rf_proxy`** component (e.g. CC1101/SX127x
+hardware). Conceptually inspired by
+[clevrdavid/rf_fan](https://github.com/clevrdavid/rf_fan), extended into a
+generic RF device manager.
 
-*Full UI-based RF device management for Home Assistant: create, learn, receive, edit,
-test and send RF codes — no YAML required. Built on the HA 2026.5 `radio_frequency`
-platform and the ESPHome IR/RF proxy.*
+## ✨ Features
 
-## ✨ Funktionen
+- **Device management via config flow**: create, duplicate, rename,
+  reconfigure, disable and delete devices — every RF device is a real device
+  in the device registry (including a `via_device` link to its ESPHome node).
+- **RF transmitter selection**: automatic discovery of all `radio_frequency`
+  transmitters (ESPHome ir_rf_proxy, Broadlink RM4 Pro, …) with frequency
+  validation.
+- **Learning wizard**: step-by-step per command, progress display
+  ("Waiting for RF signal…"), multi-signal selection with decoded previews
+  (pulses, base unit, bits, hex, tri-state, rc-switch protocol guess) and
+  live testing before saving.
+- **Manual entry**: raw timings, tri-state (PT2262/EV1527), binary with
+  rc-switch protocols 1–8, Pronto hex — everything is normalized to raw
+  timings internally.
+- **9 entity types**: switch, light (stepped brightness), fan (speeds,
+  oscillation, direction), cover (open/close/stop), button, select, number,
+  plus sensor and binary sensor (**receive-side** via fingerprint matching,
+  with auto-off).
+- **Receiving**: incoming signals from ESPHome RF receivers are decoded and
+  matched; every recognized signal fires the
+  `rf_device_manager_code_received` event for automations.
+- **Services**: `send_code`, `send_raw`, `learn_code` (returns captured
+  signals as response data).
+- **Repairs & diagnostics**: a missing transmitter raises a fixable issue
+  with a replacement picker.
+- **Persistence** via the HA storage API (`.storage/rf_device_manager`),
+  versioned and migratable. No YAML files.
+- Translations: **English** and **German**.
 
-- **Geräteverwaltung über Config Flow**: Geräte erstellen, duplizieren, umbenennen,
-  neu konfigurieren, deaktivieren und löschen — jedes RF-Gerät ist ein echtes Gerät im
-  Device Registry (inkl. `via_device`-Verknüpfung zum ESPHome-Knoten).
-- **RF-Sender-Auswahl**: Automatische Erkennung aller `radio_frequency`-Transmitter
-  (ESPHome ir_rf_proxy, Broadlink RM4 Pro, …) inkl. Frequenz-Validierung.
-- **RF-Codes anlernen**: Geführter Assistent mit Schrittanzeige pro Befehl,
-  Fortschrittsanzeige („Warte auf RF-Signal…“), Mehrfachsignal-Auswahl mit dekodierter
-  Vorschau (Pulse, Basiseinheit, Bits, Hex, Tri-State, rc-switch-Protokollvermutung)
-  und Live-Test vor dem Speichern.
-- **Manuelle Eingabe**: Raw-Timings, Tri-State (PT2262/EV1527), Binär mit
-  rc-switch-Protokoll 1–8, Pronto-Hex — alles wird intern zu Raw-Timings normalisiert.
-- **9 Entity-Typen**: Switch, Light (Helligkeits-Stepping), Fan (Stufen, Oszillation,
-  Drehrichtung), Cover (Auf/Zu/Stopp), Button, Select, Number sowie Sensor und
-  Binary Sensor (**empfangsseitig** per Fingerprint-Matching, mit Auto-Aus).
-- **Empfang**: Eingehende Signale von ESPHome-RF-Empfängern werden dekodiert und
-  gematcht; jedes erkannte Signal feuert das Event `rf_device_manager_code_received`.
-- **Services**: `send_code`, `send_raw`, `learn_code` (liefert Signale als Response).
-- **Repairs & Diagnostics**: Fehlender Sender → behebbares Issue mit Ersatz-Auswahl.
-- **Persistenz** über die HA Storage API (`.storage/rf_device_manager`), versioniert.
-- Übersetzungen: **Deutsch** und **Englisch**.
+## 📋 Requirements
 
-## 📋 Voraussetzungen
+- Home Assistant **2026.5 or newer** (`radio_frequency` platform).
+- **Sending**: at least one `radio_frequency` transmitter, e.g. an ESPHome
+  node with sub-GHz hardware (CC1101) and `ir_rf_proxy`.
+- **Learning/receiving**: an ESPHome `ir_rf_proxy` RF receiver (recommended)
+  or the event fallback (see below). RF receivers do not appear as entities
+  in Home Assistant — the integration discovers them automatically through
+  the ESPHome API.
 
-- Home Assistant **2026.5 oder neuer** (`radio_frequency`-Plattform).
-- **Senden**: mindestens ein `radio_frequency`-Transmitter, z. B. ein ESPHome-Knoten
-  mit Sub-GHz-Hardware (CC1101) und `ir_rf_proxy`.
-- **Anlernen/Empfangen**: ein ESPHome-`ir_rf_proxy`-RF-Receiver (empfohlen) oder der
-  Event-Fallback (siehe unten). RF-Empfänger erscheinen in Home Assistant nicht als
-  Entities — die Integration findet sie automatisch über die ESPHome-API.
-
-### ESPHome-Beispiel (CC1101, Senden + Empfangen)
+### ESPHome example (CC1101, transmit + receive)
 
 ```yaml
 remote_transmitter:
@@ -84,9 +90,9 @@ radio_frequency:
     remote_receiver_id: rf_rx
 ```
 
-### Event-Fallback fürs Anlernen (optional)
+### Event fallback for learning (optional)
 
-Knoten ohne ir_rf_proxy-Receiver können Captures als HA-Event liefern:
+Nodes without an ir_rf_proxy receiver can forward captures as an HA event:
 
 ```yaml
 remote_receiver:
@@ -101,62 +107,66 @@ remote_receiver:
 
 ## 📦 Installation
 
-### HACS (empfohlen)
+### HACS (recommended)
 
-1. HACS → drei Punkte (⋮) → **Benutzerdefinierte Repositories**.
-2. Repository-URL eintragen, Kategorie **Integration**, hinzufügen.
-3. **RF Device Manager** suchen und installieren.
-4. Home Assistant neu starten.
+1. HACS → three dots (⋮) → **Custom repositories**.
+2. Add `https://github.com/Gifford47/rf_device_manager` with category
+   **Integration**.
+3. Search for **RF Device Manager** and install it.
+4. Restart Home Assistant.
 
-### Manuell
+### Manual
 
-1. Den Ordner `custom_components/rf_device_manager` in das
-   `custom_components`-Verzeichnis der HA-Konfiguration kopieren.
-2. Home Assistant neu starten.
+1. Copy the `custom_components/rf_device_manager` folder into the
+   `custom_components` directory of your HA configuration.
+2. Restart Home Assistant.
 
-## 🚀 Bedienung
+## 🚀 Usage
 
-1. **Einstellungen → Geräte & Dienste → Integration hinzufügen → RF Device Manager**.
-2. **Gerät erstellen**: Name, Beschreibung, RF-Sender, Frequenz, Wiederholungen.
-3. Auf dem Gerät **Konfigurieren** öffnen → *Neuen RF-Code hinzufügen*.
-4. Entitätstyp wählen, typspezifische Optionen setzen (z. B. Ventilator-Stufen).
-5. Pro Befehl: **anlernen** (Taste drücken), Signal auswählen, **testen**, speichern —
-   oder manuell eingeben.
-6. Die Entität erscheint sofort — ohne Neustart und ohne Reload.
+1. **Settings → Devices & Services → Add Integration → RF Device Manager**.
+2. **Create a device**: name, description, RF transmitter, frequency,
+   repeats.
+3. Open **Configure** on the device → *Add new RF code*.
+4. Choose the entity type and set its type-specific options (e.g. fan speed
+   count).
+5. Per command: **learn** (press the remote button), pick the signal,
+   **test**, save — or enter the code manually.
+6. The entity appears immediately — no restart, no reload.
 
-Codes lassen sich jederzeit über *RF-Codes verwalten* bearbeiten, einzeln neu
-anlernen, testen, deaktivieren oder löschen. Geräte-Grundeinstellungen sind zusätzlich
-über **Neu konfigurieren** (Reconfigure) erreichbar.
+Codes can be edited, re-learned per command, tested, disabled or deleted at
+any time via *Manage RF codes*. Device base settings are also available via
+**Reconfigure**.
 
 ## 🔧 Services
 
-| Service | Beschreibung |
+| Service | Description |
 |---|---|
-| `rf_device_manager.send_code` | Gespeicherten Befehl eines Geräts senden (`device_id`, `code`, optional `command`, `repeat`). |
-| `rf_device_manager.send_raw` | Ad-hoc-RF-Daten senden (Raw/Tri-State/Binär/Pronto) über einen beliebigen Transmitter. |
-| `rf_device_manager.learn_code` | Auf RF-Signale warten; liefert die analysierten Captures als Response-Daten. |
+| `rf_device_manager.send_code` | Send a stored command of a managed device (`device_id`, `code`, optional `command`, `repeat`). |
+| `rf_device_manager.send_raw` | Send ad-hoc RF data (raw/tri-state/binary/Pronto) through any transmitter. |
+| `rf_device_manager.learn_code` | Listen for RF signals; returns the analyzed captures as response data. |
 
 ## 🔔 Events
 
-| Event | Wann |
+| Event | When |
 |---|---|
-| `rf_device_manager_code_received` | Ein empfangenes Signal passt zu einem gespeicherten Code (Daten: `entity_id`, `code_name`, `slot`, `source`, …). |
-| `rf_device_manager_code_learned` | Ein neuer Code wurde gespeichert. |
+| `rf_device_manager_code_received` | A received signal matches a stored code (data: `entity_id`, `code_name`, `slot`, `source`, …). |
+| `rf_device_manager_code_learned` | A new code was saved. |
 
-## 🖼️ Icon / Branding
+## 🖼️ Icon / branding
 
-Die Icons in `brand/rf_device_manager/` (256 px + 512 px) sind für das
-[home-assistant/brands](https://github.com/home-assistant/brands)-Repository
-vorbereitet: Per Pull Request nach `custom_integrations/rf_device_manager/`
-(`icon.png`, `icon@2x.png`) einreichen — danach zeigt Home Assistant das Icon
-automatisch im Integrations-Dialog an.
+The icons in `brand/rf_device_manager/` (256 px + 512 px) are prepared for
+the [home-assistant/brands](https://github.com/home-assistant/brands)
+repository: submit them via pull request to
+`custom_integrations/rf_device_manager/` (`icon.png`, `icon@2x.png`) — after
+the merge Home Assistant shows the icon automatically in the integrations
+dialog.
 
-## 🏗️ Architektur
+## 🏗️ Architecture
 
-Siehe [ARCHITECTURE.md](ARCHITECTURE.md) für Datenmodell, Modulübersicht,
-API-Grundlagen (radio_frequency / aioesphomeapi) und Erweiterungspunkte
-(IR, MQTT, weitere Protokolle).
+See [ARCHITECTURE.md](ARCHITECTURE.md) (German) for the data model, module
+overview, API foundations (radio_frequency / aioesphomeapi) and extension
+points (IR, MQTT, additional protocols).
 
-## 📄 Lizenz
+## 📄 License
 
 [MIT](LICENSE)
