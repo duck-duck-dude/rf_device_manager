@@ -1,0 +1,428 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "RF Device Manager",
+        "description": "Erstelle ein neues RF-Gerät oder dupliziere ein bestehendes.",
+        "menu_options": {
+          "create_device": "Neues Gerät erstellen",
+          "duplicate_device": "Bestehendes Gerät duplizieren"
+        }
+      },
+      "create_device": {
+        "title": "Neues RF-Gerät erstellen",
+        "description": "Definiere das RF-Gerät. {transmitter_count} RF-Sender wurde(n) gefunden. Codes werden anschließend über die Geräteoptionen (Konfigurieren) angelernt.",
+        "data": {
+          "name": "Gerätename",
+          "description": "Beschreibung",
+          "transmitter": "RF-Sender",
+          "frequency_preset": "Frequenz",
+          "frequency_custom": "Eigene Frequenz (Hz)",
+          "default_repeat": "Standard-Wiederholungen"
+        },
+        "data_description": {
+          "name": "Wird als Gerätename in Home Assistant angezeigt.",
+          "transmitter": "Die radio_frequency-Entität (z. B. ein ESPHome IR/RF-Proxy), über die Codes dieses Geräts gesendet werden.",
+          "frequency_preset": "Trägerfrequenz der Fernbedienung des Geräts.",
+          "frequency_custom": "Wird nur verwendet, wenn oben 'Eigene Frequenz…' gewählt ist.",
+          "default_repeat": "Wie oft Befehle beim Senden zusätzlich wiederholt werden."
+        }
+      },
+      "duplicate_device": {
+        "title": "Gerät duplizieren",
+        "description": "Alle Codes des ausgewählten Geräts werden auf das neue Gerät kopiert.",
+        "data": {
+          "source_entry": "Zu duplizierendes Gerät"
+        }
+      },
+      "reconfigure": {
+        "title": "{name} neu konfigurieren",
+        "description": "Passe die Grundeinstellungen dieses RF-Geräts an.",
+        "data": {
+          "name": "Gerätename",
+          "description": "Beschreibung",
+          "transmitter": "RF-Sender",
+          "frequency_preset": "Frequenz",
+          "frequency_custom": "Eigene Frequenz (Hz)",
+          "default_repeat": "Standard-Wiederholungen"
+        }
+      }
+    },
+    "error": {
+      "no_transmitters": "Keine RF-Sender gefunden. Füge zuerst einen ESPHome-Knoten mit der ir_rf_proxy-radio_frequency-Plattform (oder andere radio_frequency-Hardware) hinzu.",
+      "transmitter_not_found": "Diese Sender-Entität existiert nicht (mehr).",
+      "unsupported_frequency": "Der gewählte Sender unterstützt diese Frequenz nicht.",
+      "frequency_required": "Bitte eine eigene Frequenz in Hz eingeben.",
+      "name_required": "Bitte einen Namen eingeben."
+    },
+    "abort": {
+      "already_configured": "Dieses Gerät ist bereits konfiguriert.",
+      "no_devices": "Es gibt noch kein Gerät zum Duplizieren.",
+      "reconfigure_successful": "Das Gerät wurde aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "RF-Gerät verwalten",
+        "description": "Verwalte Einstellungen und RF-Codes dieses Geräts.",
+        "menu_options": {
+          "device_settings": "Geräteeinstellungen",
+          "add_code": "Neuen RF-Code hinzufügen",
+          "manage_codes": "RF-Codes verwalten"
+        }
+      },
+      "device_settings": {
+        "title": "Geräteeinstellungen",
+        "data": {
+          "name": "Gerätename",
+          "description": "Beschreibung",
+          "transmitter": "RF-Sender",
+          "frequency_preset": "Frequenz",
+          "frequency_custom": "Eigene Frequenz (Hz)",
+          "default_repeat": "Standard-Wiederholungen",
+          "enabled": "Gerät aktiviert"
+        }
+      },
+      "add_code": {
+        "title": "Neuer RF-Code",
+        "description": "Schritt 1 – benenne den Code und wähle, welche Entität er werden soll. Danach lernst du seine Befehle nacheinander an oder gibst sie manuell ein.",
+        "data": {
+          "name": "Name",
+          "description": "Beschreibung",
+          "entity_type": "Entitätstyp",
+          "icon": "Icon",
+          "repeat": "Wiederholungen (überschreibt Gerätestandard)"
+        }
+      },
+      "type_settings": {
+        "title": "{entity_type} konfigurieren",
+        "description": "Schritt 2 – Optionen für „{code_name}“. Sie bestimmen, welche Befehle als Nächstes angelernt werden.",
+        "data": {
+          "has_off": "Separater Aus-Befehl",
+          "has_brightness": "Helligkeitsbefehle (heller/dunkler)",
+          "brightness_steps": "Helligkeitsstufen",
+          "speed_count": "Anzahl Geschwindigkeitsstufen",
+          "has_oscillate": "Oszillations-Befehl",
+          "has_direction": "Drehrichtungs-Befehle",
+          "has_stop": "Stopp-Befehl",
+          "options": "Optionen (kommagetrennt)",
+          "values": "Werte (kommagetrennt)",
+          "unit_of_measurement": "Einheit",
+          "mode": "Darstellung",
+          "off_delay": "Auto-Aus-Verzögerung (Sekunden)",
+          "device_class": "Geräteklasse"
+        }
+      },
+      "slot_menu": {
+        "title": "Befehl festlegen",
+        "description": "Schritt {position} für „{code_name}“ – lege den Befehl **{slot}** fest.\n\nVerfügbare RF-Empfänger: {receivers}",
+        "menu_options": {
+          "slot_learn": "Code anlernen (Taste an der Fernbedienung drücken)",
+          "slot_manual": "Code manuell eingeben",
+          "slot_skip": "Diesen Befehl überspringen"
+        }
+      },
+      "slot_learn": {
+        "title": "RF-Code wird angelernt…"
+      },
+      "slot_learn_failed": {
+        "title": "Kein Signal empfangen",
+        "description": "Für **{slot}** ({position}) wurde kein RF-Signal empfangen. Prüfe, ob ein Empfänger in Reichweite ist.\n\nVerfügbare RF-Empfänger: {receivers}",
+        "menu_options": {
+          "slot_learn": "Erneut versuchen",
+          "slot_manual": "Code manuell eingeben",
+          "slot_skip": "Diesen Befehl überspringen"
+        }
+      },
+      "slot_learn_done": {
+        "title": "Signal auswählen",
+        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nWähle das Signal aus, das zu deinem Tastendruck gehört.",
+        "data": {
+          "signal": "Empfangenes Signal"
+        }
+      },
+      "slot_manual": {
+        "title": "Manuelle Eingabe: {slot}",
+        "description": "Gib die RF-Daten für **{slot}** ({position}) ein. Fülle nur das Feld aus, das zum gewählten Format passt.",
+        "data": {
+          "input_format": "Datenformat",
+          "raw_timings": "Roh-Timings (µs, z. B. [350, -1050, …])",
+          "tristate_code": "Tri-State-Code (0/1/F)",
+          "binary_code": "Binärcode (0/1)",
+          "pronto_code": "Pronto-Hex-Code",
+          "pulse_length": "Pulslänge (µs)",
+          "rc_protocol": "rc-switch-Protokoll",
+          "repeat": "Wiederholungen"
+        }
+      },
+      "slot_confirm": {
+        "title": "Befehl bestätigen",
+        "description": "**{slot}** ({position}) für „{code_name}“\n\n{summary}\nQuelle: {source}\nTimings: `{timings_preview}`\n\n{test_note}",
+        "menu_options": {
+          "slot_accept": "Befehl speichern",
+          "slot_test": "Test senden",
+          "slot_retry": "Verwerfen und erneut"
+        }
+      },
+      "save_code": {
+        "title": "RF-Code speichern",
+        "description": "**{code_name}** ({entity_type})\nKonfigurierte Befehle: {slots}\nFehlende Pflichtbefehle: {missing}",
+        "data": {
+          "enabled": "Entität aktivieren"
+        }
+      },
+      "manage_codes": {
+        "title": "RF-Codes verwalten",
+        "description": "Wähle den zu verwaltenden RF-Code aus.",
+        "data": {
+          "code": "RF-Code"
+        }
+      },
+      "code_menu": {
+        "title": "RF-Code verwalten",
+        "description": "**{code_name}** ({entity_type}) {enabled}\nBefehle: {slots}\n\n{test_note}",
+        "menu_options": {
+          "code_edit": "Bearbeiten (Name, Icon, Wiederholungen)",
+          "code_relearn": "Befehl neu anlernen",
+          "code_test": "Befehl testen",
+          "code_toggle": "Aktivieren/Deaktivieren",
+          "code_delete": "Löschen"
+        }
+      },
+      "code_edit": {
+        "title": "RF-Code bearbeiten",
+        "data": {
+          "name": "Name",
+          "description": "Beschreibung",
+          "icon": "Icon",
+          "repeat": "Wiederholungen (gilt für alle Befehle)"
+        }
+      },
+      "code_relearn": {
+        "title": "Befehl neu anlernen",
+        "description": "Welchen Befehl von „{code_name}“ möchtest du neu anlernen?",
+        "data": {
+          "slot": "Befehl"
+        }
+      },
+      "code_test": {
+        "title": "Befehl testen",
+        "description": "Welcher Befehl von „{code_name}“ soll gesendet werden?",
+        "data": {
+          "slot": "Befehl"
+        }
+      },
+      "code_delete": {
+        "title": "RF-Code löschen",
+        "description": "„{code_name}“ ({entity_type}) löschen? Die Entität und alle angelernten Befehle werden dauerhaft entfernt."
+      }
+    },
+    "progress": {
+      "learn_waiting": "Warte auf RF-Signal für **{slot}** ({position})…\n\nDrücke jetzt die Taste an deiner Fernbedienung – am besten mehrmals.\n\nAktive Empfänger: {receivers}"
+    },
+    "error": {
+      "name_required": "Bitte einen Namen eingeben.",
+      "invalid_options": "Bitte mindestens eine eindeutige Option eingeben.",
+      "invalid_values": "Bitte gültige, kommagetrennte Werte eingeben.",
+      "invalid_timings": "Die Timings konnten nicht gelesen werden.",
+      "too_few_pulses": "Das Signal ist zu kurz für einen gültigen RF-Code.",
+      "invalid_tristate": "Tri-State-Codes dürfen nur 0, 1 und F enthalten.",
+      "invalid_binary": "Binärcodes dürfen nur 0 und 1 enthalten.",
+      "invalid_pronto": "Der Pronto-Code konnte nicht gelesen werden.",
+      "invalid_protocol": "Unbekanntes rc-switch-Protokoll.",
+      "invalid_pulse_length": "Ungültige Pulslänge.",
+      "no_transmitters": "Keine RF-Sender gefunden.",
+      "transmitter_not_found": "Diese Sender-Entität existiert nicht (mehr).",
+      "unsupported_frequency": "Der gewählte Sender unterstützt diese Frequenz nicht.",
+      "frequency_required": "Bitte eine eigene Frequenz in Hz eingeben."
+    },
+    "abort": {
+      "no_codes": "Dieses Gerät hat noch keine RF-Codes."
+    }
+  },
+  "selector": {
+    "frequency_preset": {
+      "options": {
+        "custom": "Eigene Frequenz…"
+      }
+    },
+    "entity_type": {
+      "options": {
+        "switch": "Schalter",
+        "light": "Licht",
+        "fan": "Ventilator",
+        "cover": "Abdeckung (Tor/Rollladen)",
+        "button": "Taster",
+        "select": "Auswahl",
+        "number": "Zahl",
+        "sensor": "Sensor (Empfang)",
+        "binary_sensor": "Binärsensor (Empfang)"
+      }
+    },
+    "input_format": {
+      "options": {
+        "raw": "Roh-Timings (µs)",
+        "tristate": "Tri-State (PT2262/EV1527)",
+        "binary": "Binär + rc-switch-Protokoll",
+        "pronto": "Pronto-Hex"
+      }
+    },
+    "switch_device_class": {
+      "options": {
+        "switch": "Schalter",
+        "outlet": "Steckdose"
+      }
+    },
+    "cover_device_class": {
+      "options": {
+        "awning": "Markise",
+        "blind": "Jalousie",
+        "curtain": "Vorhang",
+        "damper": "Lüftungsklappe",
+        "door": "Tür",
+        "garage": "Garagentor",
+        "gate": "Tor",
+        "shade": "Verschattung",
+        "shutter": "Rollladen",
+        "window": "Fenster"
+      }
+    },
+    "binary_sensor_device_class": {
+      "options": {
+        "door": "Tür",
+        "garage_door": "Garagentor",
+        "gas": "Gas",
+        "moisture": "Feuchtigkeit",
+        "motion": "Bewegung",
+        "occupancy": "Anwesenheit",
+        "opening": "Öffnung",
+        "smoke": "Rauch",
+        "sound": "Geräusch",
+        "vibration": "Vibration",
+        "window": "Fenster"
+      }
+    },
+    "number_mode": {
+      "options": {
+        "slider": "Schieberegler",
+        "box": "Eingabefeld"
+      }
+    }
+  },
+  "services": {
+    "send_code": {
+      "name": "Code senden",
+      "description": "Sendet einen gespeicherten Befehl eines verwalteten RF-Geräts.",
+      "fields": {
+        "device_id": {
+          "name": "Gerät",
+          "description": "Das verwaltete RF-Gerät."
+        },
+        "code": {
+          "name": "RF-Code",
+          "description": "Name oder ID des RF-Codes."
+        },
+        "command": {
+          "name": "Befehl",
+          "description": "Befehls-Slot (z. B. on, off, open). Standard ist der erste konfigurierte Befehl."
+        },
+        "repeat": {
+          "name": "Wiederholungen",
+          "description": "Zusätzliche Wiederholungen; überschreibt den gespeicherten Wert."
+        }
+      }
+    },
+    "send_raw": {
+      "name": "Roh-RF-Daten senden",
+      "description": "Sendet Ad-hoc-RF-Daten über einen radio_frequency-Sender.",
+      "fields": {
+        "transmitter": {
+          "name": "Sender",
+          "description": "Die radio_frequency-Entität, über die gesendet wird."
+        },
+        "frequency": {
+          "name": "Frequenz",
+          "description": "Trägerfrequenz in Hz."
+        },
+        "timings": {
+          "name": "Roh-Timings",
+          "description": "Signierte Mikrosekunden-Timings (JSON-Array oder getrennte Zahlen)."
+        },
+        "tristate_code": {
+          "name": "Tri-State-Code",
+          "description": "Code im PT2262/EV1527-Stil aus 0, 1 und F."
+        },
+        "binary_code": {
+          "name": "Binärcode",
+          "description": "Bitfolge, kodiert mit dem gewählten rc-switch-Protokoll."
+        },
+        "pronto_code": {
+          "name": "Pronto-Code",
+          "description": "Pronto-Hex-Code (Learned-Format)."
+        },
+        "pulse_length": {
+          "name": "Pulslänge",
+          "description": "Basis-Pulslänge in µs für Tri-State-/Binärcodes."
+        },
+        "rc_protocol": {
+          "name": "rc-switch-Protokoll",
+          "description": "Timing-Profil für Tri-State-/Binärcodes (1–8)."
+        },
+        "repeat": {
+          "name": "Wiederholungen",
+          "description": "Zusätzliche Wiederholungen der Übertragung."
+        }
+      }
+    },
+    "learn_code": {
+      "name": "Code anlernen",
+      "description": "Wartet auf RF-Signale und liefert die empfangenen, analysierten Codes als Antwortdaten zurück.",
+      "fields": {
+        "timeout": {
+          "name": "Zeitlimit",
+          "description": "Wie lange auf das erste Signal gewartet wird (Sekunden)."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_transmitter": {
+      "title": "RF-Sender von „{name}“ fehlt",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Ersatz-Sender auswählen",
+            "description": "Der von „{name}“ verwendete Sender `{transmitter}` existiert nicht mehr. Wähle einen Ersatz.",
+            "data": {
+              "transmitter": "RF-Sender"
+            }
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "empty_command": {
+      "message": "Dieser RF-Befehl enthält keine Timing-Daten."
+    },
+    "transmitter_unavailable": {
+      "message": "RF-Sender {transmitter} ist nicht verfügbar."
+    },
+    "slot_not_configured": {
+      "message": "Befehl „{slot}“ ist für „{name}“ nicht konfiguriert."
+    },
+    "device_not_found": {
+      "message": "Kein verwaltetes RF-Gerät für „{device_id}“ gefunden."
+    },
+    "code_not_found": {
+      "message": "RF-Code „{code}“ wurde auf diesem Gerät nicht gefunden."
+    },
+    "no_rf_data": {
+      "message": "Bitte Roh-Timings, einen Tri-State-/Binärcode oder einen Pronto-Code angeben."
+    },
+    "invalid_rf_data": {
+      "message": "Ungültige RF-Daten: {error}"
+    }
+  }
+}

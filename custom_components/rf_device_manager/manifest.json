@@ -1,0 +1,15 @@
+{
+  "domain": "rf_device_manager",
+  "name": "RF Device Manager",
+  "after_dependencies": ["esphome"],
+  "codeowners": ["@Gifford47"],
+  "config_flow": true,
+  "dependencies": ["radio_frequency"],
+  "documentation": "https://github.com/Gifford47/rf_device_manager",
+  "integration_type": "device",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/Gifford47/rf_device_manager/issues",
+  "loggers": ["custom_components.rf_device_manager"],
+  "requirements": [],
+  "version": "1.0.0"
+}

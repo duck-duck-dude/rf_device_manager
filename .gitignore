@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Home Assistant test configs
+config/
+.storage/
+
+# Local tooling settings (not part of the integration)
+settings.json
+.claude/

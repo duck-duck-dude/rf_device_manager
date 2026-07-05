@@ -1,0 +1,428 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "RF Device Manager",
+        "description": "Create a new RF device or duplicate an existing one.",
+        "menu_options": {
+          "create_device": "Create new device",
+          "duplicate_device": "Duplicate existing device"
+        }
+      },
+      "create_device": {
+        "title": "Create new RF device",
+        "description": "Define the RF device. {transmitter_count} RF transmitter(s) were found. Codes are learned afterwards via the device options (Configure).",
+        "data": {
+          "name": "Device name",
+          "description": "Description",
+          "transmitter": "RF transmitter",
+          "frequency_preset": "Frequency",
+          "frequency_custom": "Custom frequency (Hz)",
+          "default_repeat": "Default repeats"
+        },
+        "data_description": {
+          "name": "Shown as the device name in Home Assistant.",
+          "transmitter": "The radio_frequency entity (e.g. an ESPHome IR/RF proxy) used to send codes for this device.",
+          "frequency_preset": "Carrier frequency of the device's remote control.",
+          "frequency_custom": "Only used when 'Custom frequency…' is selected above.",
+          "default_repeat": "How many extra times commands are repeated when sending."
+        }
+      },
+      "duplicate_device": {
+        "title": "Duplicate device",
+        "description": "All codes of the selected device are copied to the new device.",
+        "data": {
+          "source_entry": "Device to duplicate"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure {name}",
+        "description": "Adjust the base settings of this RF device.",
+        "data": {
+          "name": "Device name",
+          "description": "Description",
+          "transmitter": "RF transmitter",
+          "frequency_preset": "Frequency",
+          "frequency_custom": "Custom frequency (Hz)",
+          "default_repeat": "Default repeats"
+        }
+      }
+    },
+    "error": {
+      "no_transmitters": "No RF transmitters found. Add an ESPHome node with the ir_rf_proxy radio_frequency platform (or other radio_frequency hardware) first.",
+      "transmitter_not_found": "This transmitter entity does not exist (anymore).",
+      "unsupported_frequency": "The selected transmitter does not support this frequency.",
+      "frequency_required": "Please enter a custom frequency in Hz.",
+      "name_required": "Please enter a name."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "no_devices": "There is no device to duplicate yet.",
+      "reconfigure_successful": "The device was updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage RF device",
+        "description": "Manage settings and RF codes of this device.",
+        "menu_options": {
+          "device_settings": "Device settings",
+          "add_code": "Add new RF code",
+          "manage_codes": "Manage RF codes"
+        }
+      },
+      "device_settings": {
+        "title": "Device settings",
+        "data": {
+          "name": "Device name",
+          "description": "Description",
+          "transmitter": "RF transmitter",
+          "frequency_preset": "Frequency",
+          "frequency_custom": "Custom frequency (Hz)",
+          "default_repeat": "Default repeats",
+          "enabled": "Device enabled"
+        }
+      },
+      "add_code": {
+        "title": "New RF code",
+        "description": "Step 1 – name the code and choose which entity it should become. You will then learn or enter its commands one by one.",
+        "data": {
+          "name": "Name",
+          "description": "Description",
+          "entity_type": "Entity type",
+          "icon": "Icon",
+          "repeat": "Repeats (overrides device default)"
+        }
+      },
+      "type_settings": {
+        "title": "Configure {entity_type}",
+        "description": "Step 2 – options for “{code_name}”. They determine which commands are learned next.",
+        "data": {
+          "has_off": "Separate off command",
+          "has_brightness": "Brightness commands (brighter/dimmer)",
+          "brightness_steps": "Brightness steps",
+          "speed_count": "Number of speeds",
+          "has_oscillate": "Oscillation command",
+          "has_direction": "Direction commands",
+          "has_stop": "Stop command",
+          "options": "Options (comma separated)",
+          "values": "Values (comma separated)",
+          "unit_of_measurement": "Unit",
+          "mode": "Display mode",
+          "off_delay": "Auto-off delay (seconds)",
+          "device_class": "Device class"
+        }
+      },
+      "slot_menu": {
+        "title": "Provide command",
+        "description": "Step {position} for “{code_name}” – provide the command **{slot}**.\n\nAvailable RF receivers: {receivers}",
+        "menu_options": {
+          "slot_learn": "Learn code (press remote button)",
+          "slot_manual": "Enter code manually",
+          "slot_skip": "Skip this command"
+        }
+      },
+      "slot_learn": {
+        "title": "Learning RF code…"
+      },
+      "slot_learn_failed": {
+        "title": "No signal received",
+        "description": "No RF signal was received for **{slot}** ({position}). Check that a receiver is in range.\n\nAvailable RF receivers: {receivers}",
+        "menu_options": {
+          "slot_learn": "Try again",
+          "slot_manual": "Enter code manually",
+          "slot_skip": "Skip this command"
+        }
+      },
+      "slot_learn_done": {
+        "title": "Select signal",
+        "description": "Several different signals were received for **{slot}**:\n\n{signals}\n\nSelect the one matching your button press.",
+        "data": {
+          "signal": "Received signal"
+        }
+      },
+      "slot_manual": {
+        "title": "Manual entry: {slot}",
+        "description": "Enter the RF data for **{slot}** ({position}). Fill only the field matching the chosen format.",
+        "data": {
+          "input_format": "Data format",
+          "raw_timings": "Raw timings (µs, e.g. [350, -1050, …])",
+          "tristate_code": "Tri-state code (0/1/F)",
+          "binary_code": "Binary code (0/1)",
+          "pronto_code": "Pronto hex code",
+          "pulse_length": "Pulse length (µs)",
+          "rc_protocol": "rc-switch protocol",
+          "repeat": "Repeats"
+        }
+      },
+      "slot_confirm": {
+        "title": "Confirm command",
+        "description": "**{slot}** ({position}) for “{code_name}”\n\n{summary}\nSource: {source}\nTimings: `{timings_preview}`\n\n{test_note}",
+        "menu_options": {
+          "slot_accept": "Save command",
+          "slot_test": "Send test",
+          "slot_retry": "Discard and retry"
+        }
+      },
+      "save_code": {
+        "title": "Save RF code",
+        "description": "**{code_name}** ({entity_type})\nConfigured commands: {slots}\nMissing required commands: {missing}",
+        "data": {
+          "enabled": "Enable entity"
+        }
+      },
+      "manage_codes": {
+        "title": "Manage RF codes",
+        "description": "Select the RF code to manage.",
+        "data": {
+          "code": "RF code"
+        }
+      },
+      "code_menu": {
+        "title": "Manage RF code",
+        "description": "**{code_name}** ({entity_type}) {enabled}\nCommands: {slots}\n\n{test_note}",
+        "menu_options": {
+          "code_edit": "Edit (name, icon, repeats)",
+          "code_relearn": "Learn command again",
+          "code_test": "Test command",
+          "code_toggle": "Enable/disable",
+          "code_delete": "Delete"
+        }
+      },
+      "code_edit": {
+        "title": "Edit RF code",
+        "data": {
+          "name": "Name",
+          "description": "Description",
+          "icon": "Icon",
+          "repeat": "Repeats (applies to all commands)"
+        }
+      },
+      "code_relearn": {
+        "title": "Learn command again",
+        "description": "Which command of “{code_name}” do you want to learn again?",
+        "data": {
+          "slot": "Command"
+        }
+      },
+      "code_test": {
+        "title": "Test command",
+        "description": "Which command of “{code_name}” should be sent?",
+        "data": {
+          "slot": "Command"
+        }
+      },
+      "code_delete": {
+        "title": "Delete RF code",
+        "description": "Delete “{code_name}” ({entity_type})? The entity and all learned commands will be removed permanently."
+      }
+    },
+    "progress": {
+      "learn_waiting": "Waiting for RF signal for **{slot}** ({position})…\n\nPress the button on your remote now – ideally several times.\n\nActive receivers: {receivers}"
+    },
+    "error": {
+      "name_required": "Please enter a name.",
+      "invalid_options": "Please enter at least one unique option.",
+      "invalid_values": "Please enter valid, comma separated values.",
+      "invalid_timings": "The timings could not be parsed.",
+      "too_few_pulses": "The signal is too short to be a valid RF code.",
+      "invalid_tristate": "Tri-state codes may only contain 0, 1 and F.",
+      "invalid_binary": "Binary codes may only contain 0 and 1.",
+      "invalid_pronto": "The Pronto code could not be parsed.",
+      "invalid_protocol": "Unknown rc-switch protocol.",
+      "invalid_pulse_length": "Invalid pulse length.",
+      "no_transmitters": "No RF transmitters found.",
+      "transmitter_not_found": "This transmitter entity does not exist (anymore).",
+      "unsupported_frequency": "The selected transmitter does not support this frequency.",
+      "frequency_required": "Please enter a custom frequency in Hz."
+    },
+    "abort": {
+      "no_codes": "This device has no RF codes yet."
+    }
+  },
+  "selector": {
+    "frequency_preset": {
+      "options": {
+        "custom": "Custom frequency…"
+      }
+    },
+    "entity_type": {
+      "options": {
+        "switch": "Switch",
+        "light": "Light",
+        "fan": "Fan",
+        "cover": "Cover",
+        "button": "Button",
+        "select": "Select",
+        "number": "Number",
+        "sensor": "Sensor (receive)",
+        "binary_sensor": "Binary sensor (receive)"
+      }
+    },
+    "input_format": {
+      "options": {
+        "raw": "Raw timings (µs)",
+        "tristate": "Tri-state (PT2262/EV1527)",
+        "binary": "Binary + rc-switch protocol",
+        "pronto": "Pronto hex"
+      }
+    },
+    "switch_device_class": {
+      "options": {
+        "switch": "Switch",
+        "outlet": "Outlet"
+      }
+    },
+    "cover_device_class": {
+      "options": {
+        "awning": "Awning",
+        "blind": "Blind",
+        "curtain": "Curtain",
+        "damper": "Damper",
+        "door": "Door",
+        "garage": "Garage door",
+        "gate": "Gate",
+        "shade": "Shade",
+        "shutter": "Shutter",
+        "window": "Window"
+      }
+    },
+    "binary_sensor_device_class": {
+      "options": {
+        "door": "Door",
+        "garage_door": "Garage door",
+        "gas": "Gas",
+        "moisture": "Moisture",
+        "motion": "Motion",
+        "occupancy": "Occupancy",
+        "opening": "Opening",
+        "smoke": "Smoke",
+        "sound": "Sound",
+        "vibration": "Vibration",
+        "window": "Window"
+      }
+    },
+    "number_mode": {
+      "options": {
+        "slider": "Slider",
+        "box": "Input field"
+      }
+    }
+  },
+  "services": {
+    "send_code": {
+      "name": "Send code",
+      "description": "Sends a stored command of a managed RF device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The managed RF device."
+        },
+        "code": {
+          "name": "RF code",
+          "description": "Name or ID of the RF code."
+        },
+        "command": {
+          "name": "Command",
+          "description": "Command slot (e.g. on, off, open). Defaults to the first configured command."
+        },
+        "repeat": {
+          "name": "Repeats",
+          "description": "Extra repetitions; overrides the stored value."
+        }
+      }
+    },
+    "send_raw": {
+      "name": "Send raw RF data",
+      "description": "Transmits ad-hoc RF data through a radio_frequency transmitter.",
+      "fields": {
+        "transmitter": {
+          "name": "Transmitter",
+          "description": "The radio_frequency entity to send with."
+        },
+        "frequency": {
+          "name": "Frequency",
+          "description": "Carrier frequency in Hz."
+        },
+        "timings": {
+          "name": "Raw timings",
+          "description": "Signed microsecond timings (JSON array or separated numbers)."
+        },
+        "tristate_code": {
+          "name": "Tri-state code",
+          "description": "PT2262/EV1527 style code consisting of 0, 1 and F."
+        },
+        "binary_code": {
+          "name": "Binary code",
+          "description": "Bit string encoded with the selected rc-switch protocol."
+        },
+        "pronto_code": {
+          "name": "Pronto code",
+          "description": "Pronto hex code (learned format)."
+        },
+        "pulse_length": {
+          "name": "Pulse length",
+          "description": "Base pulse length in µs for tri-state/binary codes."
+        },
+        "rc_protocol": {
+          "name": "rc-switch protocol",
+          "description": "Timing profile for tri-state/binary codes (1–8)."
+        },
+        "repeat": {
+          "name": "Repeats",
+          "description": "Extra repetitions of the transmission."
+        }
+      }
+    },
+    "learn_code": {
+      "name": "Learn code",
+      "description": "Listens for RF signals and returns the captured, analyzed codes as response data.",
+      "fields": {
+        "timeout": {
+          "name": "Timeout",
+          "description": "How long to wait for the first signal (seconds)."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_transmitter": {
+      "title": "RF transmitter of “{name}” is missing",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Select replacement transmitter",
+            "description": "The transmitter `{transmitter}` used by “{name}” no longer exists. Choose a replacement.",
+            "data": {
+              "transmitter": "RF transmitter"
+            }
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "empty_command": {
+      "message": "This RF command contains no timing data."
+    },
+    "transmitter_unavailable": {
+      "message": "RF transmitter {transmitter} is unavailable."
+    },
+    "slot_not_configured": {
+      "message": "Command “{slot}” is not configured for “{name}”."
+    },
+    "device_not_found": {
+      "message": "No managed RF device found for “{device_id}”."
+    },
+    "code_not_found": {
+      "message": "RF code “{code}” was not found on this device."
+    },
+    "no_rf_data": {
+      "message": "Provide raw timings, a tri-state/binary code or a Pronto code."
+    },
+    "invalid_rf_data": {
+      "message": "Invalid RF data: {error}"
+    }
+  }
+}

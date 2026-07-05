@@ -1,0 +1,7 @@
+{
+  "services": {
+    "send_code": "mdi:remote",
+    "send_raw": "mdi:radio-tower",
+    "learn_code": "mdi:record-rec"
+  }
+}

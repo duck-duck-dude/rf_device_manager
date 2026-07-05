@@ -1,0 +1,99 @@
+send_code:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: rf_device_manager
+    code:
+      required: true
+      example: "Garage door"
+      selector:
+        text:
+    command:
+      required: false
+      example: "open"
+      selector:
+        text:
+    repeat:
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 50
+          mode: box
+
+send_raw:
+  fields:
+    transmitter:
+      required: true
+      selector:
+        entity:
+          domain: radio_frequency
+    frequency:
+      required: false
+      default: 433920000
+      selector:
+        number:
+          min: 100000000
+          max: 1000000000
+          step: 1000
+          mode: box
+          unit_of_measurement: "Hz"
+    timings:
+      required: false
+      example: "[350, -1050, 1050, -350, 350, -1050]"
+      selector:
+        text:
+          multiline: true
+    tristate_code:
+      required: false
+      example: "0FF0F0FF0001"
+      selector:
+        text:
+    binary_code:
+      required: false
+      example: "100110100101"
+      selector:
+        text:
+    pronto_code:
+      required: false
+      selector:
+        text:
+          multiline: true
+    pulse_length:
+      required: false
+      selector:
+        number:
+          min: 50
+          max: 5000
+          mode: box
+          unit_of_measurement: "µs"
+    rc_protocol:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 8
+          mode: box
+    repeat:
+      required: false
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 50
+          mode: box
+
+learn_code:
+  fields:
+    timeout:
+      required: false
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 300
+          mode: box
+          unit_of_measurement: "s"
