@@ -137,9 +137,10 @@
       },
       "slot_learn_done": {
         "title": "Select signal",
-        "description": "Several different signals were received for **{slot}**:\n\n{signals}\n\nSelect the one matching your button press.",
+        "description": "Several different signals were received for **{slot}**:\n\n{signals}\n\nSelect the one matching your button press. Enable “Test only” to transmit the selected signal without saving it yet.\n\n{test_note}",
         "data": {
-          "signal": "Received signal"
+          "signal": "Received signal",
+          "test": "Test only (send selected signal, do not save yet)"
         }
       },
       "slot_manual": {
@@ -167,10 +168,7 @@
       },
       "save_code": {
         "title": "Save RF code",
-        "description": "**{code_name}** ({entity_type})\nConfigured commands: {slots}\nMissing required commands: {missing}",
-        "data": {
-          "enabled": "Enable entity"
-        }
+        "description": "**{code_name}** ({entity_type})\nConfigured commands: {slots}\nMissing required commands: {missing}"
       },
       "manage_codes": {
         "title": "Manage RF codes",

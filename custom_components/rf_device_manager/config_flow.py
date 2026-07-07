@@ -790,15 +790,22 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
     async def async_step_slot_learn_done(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user pick one of the captured signals."""
+        """Let the user pick one of the captured signals (with live test)."""
         if len(self._signals) == 1 and user_input is None:
             self._async_build_pending(self._signals[0])
             return await self.async_step_slot_confirm()
 
+        selected = "0"
         if user_input is not None:
-            index = int(user_input["signal"])
-            self._async_build_pending(self._signals[index])
-            return await self.async_step_slot_confirm()
+            selected = user_input["signal"]
+            index = int(selected)
+            if user_input.get("test"):
+                # Send the selected signal once, then re-show the list.
+                await self._async_test_signal(index)
+            else:
+                self._test_note = ""
+                self._async_build_pending(self._signals[index])
+                return await self.async_step_slot_confirm()
 
         options = [
             SelectOptionDict(
@@ -816,22 +823,42 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
             f"{rf_analysis.describe_signal(signal.analysis, self._language)}"
             for index, signal in enumerate(self._signals)
         )
+        note, self._test_note = self._test_note, ""
         return self.async_show_form(
             step_id="slot_learn_done",
             data_schema=vol.Schema(
                 {
-                    vol.Required("signal", default="0"): SelectSelector(
+                    vol.Required("signal", default=selected): SelectSelector(
                         SelectSelectorConfig(
                             options=options, mode=SelectSelectorMode.LIST
                         )
-                    )
+                    ),
+                    vol.Required("test", default=False): BooleanSelector(),
                 }
             ),
             description_placeholders={
                 **self._slot_placeholders(),
                 "signals": summary,
+                "test_note": note,
             },
         )
+
+    async def _async_test_signal(self, index: int) -> None:
+        """Send a captured signal once so the user can verify it live."""
+        signal = self._signals[index]
+        device = self._device()
+        command = RFCommandData(
+            frequency=signal.frequency or device.frequency,
+            data=list(signal.timings),
+            repeat=device.default_repeat,
+        )
+        rf_manager = get_domain_data(self.hass).rf_manager
+        try:
+            await rf_manager.async_send(command, device.transmitter)
+        except Exception as err:  # noqa: BLE001 - shown inline, flow continues
+            self._test_note = f"❌ Signal {index + 1}: {err}"
+        else:
+            self._test_note = f"✅ Signal {index + 1}"
 
     @callback
     def _async_build_pending(self, signal: CapturedSignal) -> None:
@@ -1066,7 +1093,6 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
         """Final confirmation before the code is stored."""
         assert self._code is not None
         if user_input is not None:
-            self._code.enabled = user_input.get(CONF_ENABLED, True)
             get_domain_data(self.hass).device_manager.async_add_code(self._code)
             return self._finish()
 
@@ -1077,9 +1103,7 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
         ]
         return self.async_show_form(
             step_id="save_code",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_ENABLED, default=True): BooleanSelector()}
-            ),
+            data_schema=vol.Schema({}),
             description_placeholders={
                 "code_name": self._code.name,
                 "entity_type": self._code.entity_type,

@@ -137,9 +137,10 @@
       },
       "slot_learn_done": {
         "title": "Signal auswählen",
-        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nWähle das Signal aus, das zu deinem Tastendruck gehört.",
+        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nWähle das Signal aus, das zu deinem Tastendruck gehört. Aktiviere „Nur testen“, um das gewählte Signal zu senden, ohne es schon zu übernehmen.\n\n{test_note}",
         "data": {
-          "signal": "Empfangenes Signal"
+          "signal": "Empfangenes Signal",
+          "test": "Nur testen (gewähltes Signal senden, noch nicht übernehmen)"
         }
       },
       "slot_manual": {
@@ -167,10 +168,7 @@
       },
       "save_code": {
         "title": "RF-Code speichern",
-        "description": "**{code_name}** ({entity_type})\nKonfigurierte Befehle: {slots}\nFehlende Pflichtbefehle: {missing}",
-        "data": {
-          "enabled": "Entität aktivieren"
-        }
+        "description": "**{code_name}** ({entity_type})\nKonfigurierte Befehle: {slots}\nFehlende Pflichtbefehle: {missing}"
       },
       "manage_codes": {
         "title": "RF-Codes verwalten",

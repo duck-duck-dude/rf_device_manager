@@ -13,7 +13,11 @@ from __future__ import annotations
 import logging
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv, issue_registry as ir
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    issue_registry as ir,
+)
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -106,6 +110,22 @@ async def async_unload_entry(
             entry.data[CONF_DEVICE_ID]
         )
     return unload_ok
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: RFDeviceManagerConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Allow deleting the RF device from the device registry UI.
+
+    Each config entry manages exactly one device, so removing the device
+    removes the whole entry - including all stored codes and entities.
+    The entry removal is scheduled as a task because Home Assistant is
+    still processing the device removal when this hook runs.
+    """
+    hass.async_create_task(hass.config_entries.async_remove(entry.entry_id))
+    return True
 
 
 async def async_remove_entry(
