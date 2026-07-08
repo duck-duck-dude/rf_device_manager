@@ -869,7 +869,9 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
         extra = {
             key: analysis[key]
             for key in (
+                "encoding",
                 "bits",
+                "bit_count",
                 "hex",
                 "tristate",
                 "protocol_guess",
@@ -993,15 +995,32 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
             if repeat_raw is not None
             else int(self._code.settings.get(CONF_REPEAT, device.default_repeat))
         )
+        # Run the decoder chain so manual entries get the same protocol
+        # display (encoding, bits, hex) as learned signals.
+        analysis = rf_analysis.analyze(timings)
+        extra = {
+            key: analysis[key]
+            for key in (
+                "encoding",
+                "bits",
+                "bit_count",
+                "hex",
+                "tristate",
+                "protocol_guess",
+                "frame_count",
+            )
+            if key in analysis
+        }
         return RFCommandData(
             protocol=input_format,
             frequency=frequency,
             data=timings,
-            pulse_length=pulse_length,
+            pulse_length=pulse_length or analysis.get("base_unit_us"),
             code=code_text,
             repeat=repeat,
             source="manual",
-            fingerprint=rf_analysis.fingerprint(timings),
+            fingerprint=analysis.get("fingerprint"),
+            extra=extra,
         )
 
     async def async_step_slot_confirm(
@@ -1009,27 +1028,23 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Preview the pending command: accept, test or retry."""
         assert self._pending is not None
+        pending = self._pending
+        pending_analysis = {
+            **pending.extra,
+            "pulse_count": len(pending.data),
+            "frame_count": pending.extra.get("frame_count", 1),
+            "base_unit_us": pending.pulse_length,
+            "bit_count": pending.extra.get("bit_count")
+            or len(pending.extra.get("bits", ""))
+            or None,
+            "tristate": pending.extra.get("tristate")
+            or (pending.code if pending.protocol == PROTOCOL_TRISTATE else None),
+        }
         placeholders = {
             **self._slot_placeholders(),
-            "summary": rf_analysis.describe_signal(
-                {
-                    "pulse_count": len(self._pending.data),
-                    "frame_count": self._pending.extra.get("frame_count", 1),
-                    "base_unit_us": self._pending.pulse_length,
-                    "bit_count": len(self._pending.extra.get("bits", "")) or None,
-                    "hex": self._pending.extra.get("hex"),
-                    "tristate": self._pending.extra.get("tristate")
-                    or (
-                        self._pending.code
-                        if self._pending.protocol == PROTOCOL_TRISTATE
-                        else None
-                    ),
-                    "protocol_guess": self._pending.extra.get("protocol_guess"),
-                },
-                self._language,
-            ),
-            "timings_preview": rf_analysis.preview_timings(self._pending.data),
-            "source": self._pending.source,
+            "summary": rf_analysis.signal_details(pending_analysis, self._language),
+            "timings_preview": rf_analysis.preview_timings(pending.data),
+            "source": pending.source,
             "test_note": self._test_note,
         }
         self._test_note = ""

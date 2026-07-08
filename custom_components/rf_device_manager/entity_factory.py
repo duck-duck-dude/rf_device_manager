@@ -131,7 +131,12 @@ class RFCodeEntity(CoordinatorEntity[RFDeviceCoordinator], RestoreEntity):
         attributes: dict[str, Any] = {
             "rf_device_id": code.device_id,
             "rf_code_id": code.id,
-            "commands": sorted(code.commands),
+            # Per-command protocol summary, e.g.
+            # "open": "Space distance (EV1527/PT2262-style) · 0x… (63 bit)"
+            "commands": {
+                slot: command.protocol_summary()
+                for slot, command in sorted(code.commands.items())
+            },
         }
         if code.description:
             attributes["description"] = code.description

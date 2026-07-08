@@ -85,9 +85,15 @@ custom_components/rf_device_manager/
 ├─ const.py               # Domain, Entity-Typen, Frequenz-Presets, Defaults, Events
 ├─ models.py              # Dataclasses: RFCommandData, RFCode, RFDeviceConfig,
 │                         #   CapturedSignal, SlotSpec + build_slots()
-├─ rf_analysis.py         # Frame-Splitting, Basiseinheit, Quantisierung, Fingerprint,
-│                         #   PWM/Tri-State-Dekoder, Encoder (tristate/binär/rc-switch),
-│                         #   Pronto-Parser, Vorschau-Texte, Manual-Input-Parser
+├─ decoders.py            # Protokoll-Erkennung: Dekoder-Kette (DECODERS-Registry) mit
+│                         #   je einem dokumentierten Detektor pro Kodierungs-Muster
+│                         #   (space_distance, mark_width, pwm/rc-switch, manchester),
+│                         #   EncodingInfo-Labels fürs UI, RC_PROTOCOLS-Tabelle.
+│                         #   Rein stdlib → standalone testbar (tests/test_decoders.py)
+├─ rf_analysis.py         # Normalisierung (Glitch-Filter), Frame-Splitting, Basiseinheit,
+│                         #   Fingerprints (bit-basiert, jitter-immun), Ähnlichkeit/
+│                         #   Clustering-Primitiven, UI-Zusammenfassungen, Encoder
+│                         #   (tristate/binär/rc-switch), Pronto-/Manual-Input-Parser
 ├─ storage.py             # RFDeviceStore (Store v1, delay-save, CRUD, Migration)
 ├─ rf_manager.py          # RFManager (Senden via radio_frequency-Helper, Transmitter-
 │                         #   Discovery), ReceiverHub (ESPHome-Subscribe + Bus-Fallback,
@@ -135,7 +141,10 @@ Fingerprint-Match → State-Update + Bus-Event `rf_device_manager_code_received`
   `infrared`-Helper (`async_send_command`, `async_subscribe_receiver`) nutzen.
 - **MQTT/weitere Quellen:** `ReceiverHub`-Quellen und Sende-Transports sind Listen —
   neue Quellen registrieren sich mit `(name, subscribe_fn)`.
-- **Protokolle:** `rf_analysis.PROTOCOLS`-Tabelle (rc-switch-kompatibel) ist rein
-  additiv erweiterbar; `protocol`-Feld im Storage ist offen.
+- **Protokolle:** Die Dekoder-Kette in `decoders.py` (`DECODERS`-Registry) ist rein
+  additiv erweiterbar — ein neuer Detektor ist eine Funktion `FrameContext →
+  DecodedFrame | None` plus Registry-Eintrag, Label und Testfall (Anleitung im
+  Modul-Docstring). `RC_PROTOCOLS` (rc-switch) und das `protocol`-Feld im Storage
+  sind offen.
 - **Gruppen/Szenen/Cloud/Backup:** Store-Schema versioniert (`STORAGE_VERSION`,
   `async_migrate`), Diagnostics liefert Export; Codes sind reine Daten.

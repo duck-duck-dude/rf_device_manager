@@ -43,6 +43,7 @@ from .const import (
     ENTITY_TYPE_SWITCH,
     PROTOCOL_RAW,
 )
+from .decoders import encoding_label
 
 # ---------------------------------------------------------------------------
 # Command slots
@@ -241,6 +242,31 @@ class RFCommandData:
             fingerprint=data.get("fingerprint"),
             extra=dict(data.get("extra", {})),
         )
+
+    def protocol_summary(self) -> str:
+        """Return a short protocol summary for entity attributes.
+
+        Examples: ``Space distance (EV1527/PT2262-style) · 0x3332AAAB (63
+        bit)`` for decoded commands, ``raw · 131 pulses`` otherwise.
+        """
+        parts: list[str] = []
+        if encoding := self.extra.get("encoding"):
+            parts.append(encoding_label(encoding))
+        elif self.protocol != PROTOCOL_RAW:
+            parts.append(self.protocol)
+        else:
+            parts.append("raw")
+
+        if hex_code := self.extra.get("hex"):
+            bit_count = self.extra.get("bit_count") or len(
+                self.extra.get("bits", "")
+            )
+            parts.append(f"{hex_code} ({bit_count} bit)" if bit_count else hex_code)
+        elif self.code:
+            parts.append(self.code)
+        else:
+            parts.append(f"{len(self.data)} pulses")
+        return " · ".join(parts)
 
 
 # ---------------------------------------------------------------------------

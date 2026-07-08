@@ -1,18 +1,21 @@
-"""RF signal analysis, decoding and encoding helpers.
+"""RF signal analysis and encoding helpers.
 
 Pure-Python utilities (no Home Assistant imports) that operate on raw OOK
 timing trains: signed, alternating microseconds where positive values are
 marks (carrier on) and negative values are spaces (carrier off).
 
-Provided functionality:
+Responsibilities of this module:
 
-* normalizing and trimming captured pulse trains
+* normalizing captures (sign, glitch removal, idle trimming)
 * splitting captures into repeated frames and picking the dominant one
-* estimating the base pulse unit and quantizing frames
-* stable fingerprints for matching received signals against stored codes
-* decoding PWM (rc-switch style) and PT2262/EV1527 tri-state codes
+* jitter-tolerant fingerprints and signal similarity/clustering primitives
+* human-readable signal summaries for the UI
 * encoding binary / tri-state codes back into raw timings
 * parsing Pronto hex and free-form manual timing input
+
+Protocol *decoding* lives in :mod:`.decoders` - one documented detector per
+encoding scheme, walked as a chain. See that module's docstring for how to
+add support for further encodings.
 """
 
 from __future__ import annotations
@@ -24,31 +27,21 @@ import re
 from typing import Any
 
 from .const import IDLE_TRIM_US, MIN_SIGNAL_PULSES
+from .decoders import (  # noqa: F401  (re-exported for flows/services)
+    RC_PROTOCOLS,
+    TRISTATE_TO_BITS,
+    decode_frame,
+    encoding_label,
+)
 
-# Splitting captures into frames: a space at least this long - or this many
-# times the median pulse - terminates a frame.
-_FRAME_GAP_MIN_US = 3_500
-_FRAME_GAP_FACTOR = 6
+# Splitting captures into frames: a space terminates a frame when it clearly
+# exceeds the regular pulse population (95th percentile based, with a floor).
+# Real-world sync gaps can be as short as ~2.5 ms (e.g. EV1527 remotes).
+_FRAME_GAP_MIN_US = 2_400
+_FRAME_GAP_FACTOR = 1.7
 
 # Quantization limits
 _MAX_QUANT = 127
-
-# rc-switch compatible protocol timing table. Each waveform is expressed in
-# multiples of the base pulse length: (high units, low units). Frames are
-# transmitted as all data bits followed by the sync waveform. Protocol 6
-# (HT6P20B) is inverted and intentionally not supported.
-RC_PROTOCOLS: dict[int, dict[str, Any]] = {
-    1: {"pulse": 350, "sync": (1, 31), "zero": (1, 3), "one": (3, 1)},
-    2: {"pulse": 650, "sync": (1, 10), "zero": (1, 2), "one": (2, 1)},
-    3: {"pulse": 100, "sync": (30, 71), "zero": (4, 11), "one": (9, 6)},
-    4: {"pulse": 380, "sync": (1, 6), "zero": (1, 3), "one": (3, 1)},
-    5: {"pulse": 500, "sync": (6, 14), "zero": (1, 2), "one": (2, 1)},
-    7: {"pulse": 150, "sync": (2, 62), "zero": (1, 6), "one": (6, 1)},
-    8: {"pulse": 200, "sync": (3, 130), "zero": (7, 16), "one": (3, 16)},
-}
-
-_TRISTATE_TO_BITS = {"0": "00", "1": "11", "F": "01"}
-_BITS_TO_TRISTATE = {"00": "0", "11": "1", "01": "F"}
 
 # Pronto clock: one unit equals ``frequency_divider * 0.241246`` microseconds.
 _PRONTO_CLOCK = 0.241246
@@ -101,9 +94,96 @@ def trim_idle(timings: list[int], threshold: int = IDLE_TRIM_US) -> list[int]:
     return trimmed
 
 
+def coalesce(timings: list[int]) -> list[int]:
+    """Merge adjacent pulses of the same polarity into one duration."""
+    out: list[int] = []
+    for value in timings:
+        if out and (out[-1] > 0) == (value > 0):
+            out[-1] += value
+        else:
+            out.append(value)
+    return out
+
+
+def remove_glitches(timings: list[int], min_us: int = 80) -> list[int]:
+    """Absorb sub-``min_us`` spikes into their neighbouring pulses.
+
+    A too-short pulse of opposite polarity splits what should be one long
+    pulse (e.g. ``+500, -30, +480`` → ``+1010``); merging these makes
+    captures - and therefore fingerprints - far more stable.
+    """
+    values = [value for value in timings if value != 0]
+    out: list[int] = []
+    index = 0
+    while index < len(values):
+        value = values[index]
+        if abs(value) >= min_us or not out or index == len(values) - 1:
+            out.append(value)
+            index += 1
+            continue
+        nxt = values[index + 1]
+        sign = 1 if out[-1] > 0 else -1
+        if (out[-1] > 0) == (nxt > 0):
+            out[-1] += sign * (abs(value) + abs(nxt))
+            index += 2
+        else:
+            out[-1] += sign * abs(value)
+            index += 1
+    return coalesce(out)
+
+
 def normalize(timings: list[int]) -> list[int]:
-    """Fully normalize a raw capture (signed + idle-trimmed)."""
-    return trim_idle(ensure_signed(timings))
+    """Fully normalize a raw capture (signed, de-glitched, idle-trimmed)."""
+    return trim_idle(remove_glitches(ensure_signed(timings)))
+
+
+# ---------------------------------------------------------------------------
+# Similarity / clustering primitives
+# ---------------------------------------------------------------------------
+
+
+def frames_similar(
+    frame_a: list[int],
+    frame_b: list[int],
+    tolerance: float = 0.30,
+    floor_us: int = 150,
+) -> bool:
+    """Return whether two frames are the same code within timing jitter.
+
+    Frames must have the same edge count and matching polarity; each pulse
+    may deviate by ``tolerance`` (relative) or ``floor_us`` (absolute),
+    whichever is larger. The trailing sync gap is allowed twice the
+    tolerance because receivers truncate it inconsistently.
+    """
+    if not frame_a or not frame_b or len(frame_a) != len(frame_b):
+        return False
+    last = len(frame_a) - 1
+    for index, (a, b) in enumerate(zip(frame_a, frame_b, strict=False)):
+        if (a > 0) != (b > 0):
+            return False
+        abs_a, abs_b = abs(a), abs(b)
+        allowed = max(floor_us, tolerance * max(abs_a, abs_b))
+        if index == last:
+            allowed *= 2
+        if abs(abs_a - abs_b) > allowed:
+            return False
+    return True
+
+
+def same_code(analysis_a: dict[str, Any], analysis_b: dict[str, Any]) -> bool:
+    """Return whether two analyzed captures carry the same RF code.
+
+    Decoded bit strings are the strongest signal (stable across timing
+    jitter and truncated frames); otherwise the dominant frames are compared
+    with timing tolerance.
+    """
+    bits_a, bits_b = analysis_a.get("bits"), analysis_b.get("bits")
+    if bits_a and bits_b:
+        return bits_a == bits_b
+    return frames_similar(
+        analysis_a.get("dominant_frame") or [],
+        analysis_b.get("dominant_frame") or [],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +200,8 @@ def split_frames(timings: list[int]) -> list[list[int]]:
     if not timings:
         return []
     absolutes = sorted(abs(value) for value in timings)
-    median = absolutes[len(absolutes) // 2]
-    gap_threshold = max(_FRAME_GAP_MIN_US, _FRAME_GAP_FACTOR * median)
+    percentile_95 = absolutes[int(0.95 * (len(absolutes) - 1))]
+    gap_threshold = max(_FRAME_GAP_MIN_US, _FRAME_GAP_FACTOR * percentile_95)
 
     frames: list[list[int]] = []
     current: list[int] = []
@@ -192,13 +272,19 @@ def quantize_frame(frame: list[int], unit: int) -> list[int]:
 def fingerprint(timings: list[int]) -> str | None:
     """Return a jitter-tolerant fingerprint of a capture, or ``None``.
 
-    The dominant frame is quantized relative to its own base unit, so the
-    fingerprint is stable across captures with a few percent timing jitter.
+    When the dominant frame decodes to a bit string, the fingerprint hashes
+    the bits - fully immune to timing jitter. Otherwise the frame is
+    quantized relative to its own base unit as a fallback.
     """
     normalized = normalize(timings)
     if len(normalized) < MIN_SIGNAL_PULSES:
         return None
     frame = dominant_frame(split_frames(normalized))
+
+    if bits := decode_frame(frame).get("bits"):
+        digest = hashlib.sha1(bits.encode()).hexdigest()[:12]
+        return f"{len(bits)}b:{digest}"
+
     unit = estimate_base_unit(frame)
     symbols = quantize_frame(frame, unit)
     if not symbols:
@@ -217,98 +303,16 @@ def matches(timings: list[int], known_fingerprint: str | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Decoding
+# Analysis pipeline + UI summaries
 # ---------------------------------------------------------------------------
-
-
-def _to_pairs(frame: list[int]) -> list[tuple[int, int]]:
-    """Convert a frame into (mark, space) pairs, dropping partial edges."""
-    values = frame[1:] if frame and frame[0] < 0 else list(frame)
-    pairs: list[tuple[int, int]] = []
-    for index in range(0, len(values) - 1, 2):
-        mark, space = values[index], values[index + 1]
-        if mark > 0 and space < 0:
-            pairs.append((mark, -space))
-    return pairs
-
-
-def _guess_protocol(short: float, long: float, sync_low: float) -> int | None:
-    """Match measured PWM ratios against the rc-switch protocol table."""
-    if short <= 0:
-        return None
-    long_ratio = long / short
-    sync_ratio = sync_low / short
-    best: tuple[float, int] | None = None
-    for protocol_id, spec in RC_PROTOCOLS.items():
-        zero_high, zero_low = spec["zero"]
-        expected_long = max(zero_low, spec["one"][0]) / min(zero_high, spec["one"][1])
-        expected_sync = spec["sync"][1] / min(zero_high, spec["one"][1])
-        error = abs(long_ratio - expected_long) / expected_long + abs(
-            sync_ratio - expected_sync
-        ) / max(expected_sync, 1)
-        if error < 0.35 and (best is None or error < best[0]):
-            best = (error, protocol_id)
-    return best[1] if best else None
-
-
-def decode_frame(frame: list[int]) -> dict[str, Any]:
-    """Try to decode a single frame as a PWM (rc-switch style) bit stream.
-
-    Returns a dict that may contain ``bits`` (binary string), ``hex``,
-    ``tristate``, ``pulse_length`` and ``protocol_guess``. Empty dict when
-    the frame does not look like a simple PWM code.
-    """
-    pairs = _to_pairs(frame)
-    if len(pairs) < 5:
-        return {}
-
-    # The final pair carries the sync gap.
-    *bit_pairs, sync_pair = pairs
-    if len(bit_pairs) < 4:
-        return {}
-
-    durations = [duration for pair in bit_pairs for duration in pair]
-    shorts = [d for d in durations if d <= min(durations) * 1.6]
-    longs = [d for d in durations if d > min(durations) * 1.6]
-    if not shorts or not longs:
-        return {}
-    short = sum(shorts) / len(shorts)
-    long = sum(longs) / len(longs)
-    if long / short < 1.4:
-        return {}
-
-    bits: list[str] = []
-    for mark, space in bit_pairs:
-        mark_is_long = abs(mark - long) < abs(mark - short)
-        space_is_long = abs(space - long) < abs(space - short)
-        if mark_is_long == space_is_long:
-            return {}  # not a clean short/long PWM pair
-        bits.append("1" if mark_is_long else "0")
-
-    bit_string = "".join(bits)
-    result: dict[str, Any] = {
-        "bits": bit_string,
-        "bit_count": len(bit_string),
-        "hex": f"0x{int(bit_string, 2):X}",
-        "pulse_length": round(short),
-    }
-
-    if len(bit_string) % 2 == 0:
-        groups = [bit_string[i : i + 2] for i in range(0, len(bit_string), 2)]
-        if all(group in _BITS_TO_TRISTATE for group in groups):
-            result["tristate"] = "".join(_BITS_TO_TRISTATE[g] for g in groups)
-
-    protocol = _guess_protocol(short, long, sync_pair[1])
-    if protocol is not None:
-        result["protocol_guess"] = protocol
-    return result
 
 
 def analyze(timings: list[int]) -> dict[str, Any]:
     """Run the full analysis pipeline over a capture.
 
-    Returns a JSON-serializable dict used for previews, storage metadata and
-    service responses.
+    Normalizes, splits into frames, decodes the dominant frame via the
+    :mod:`.decoders` chain and returns a JSON-serializable dict used for
+    previews, storage metadata and service responses.
     """
     normalized = normalize(timings)
     frames = split_frames(normalized)
@@ -329,23 +333,79 @@ def analyze(timings: list[int]) -> dict[str, Any]:
 
 
 def describe_signal(analysis: dict[str, Any], language: str = "en") -> str:
-    """Return a compact one-line human readable signal summary."""
+    """Return a compact one-line summary (signal selection list entries).
+
+    Leads with the detected protocol so different remotes are easy to tell
+    apart at a glance.
+    """
     german = language.lower().startswith("de")
-    parts: list[str] = [
-        f"{analysis.get('pulse_count', 0)} {'Pulse' if german else 'pulses'}",
-        f"{analysis.get('frame_count', 0)} Frames",
-    ]
-    if unit := analysis.get("base_unit_us"):
-        parts.append(f"~{unit} µs")
-    if bit_count := analysis.get("bit_count"):
-        parts.append(f"{bit_count} Bit" if german else f"{bit_count} bit")
-    if hex_code := analysis.get("hex"):
-        parts.append(hex_code)
-    if tristate := analysis.get("tristate"):
-        parts.append(f"Tri-State {tristate}")
+    parts: list[str] = []
+
+    if encoding := analysis.get("encoding"):
+        parts.append(encoding_label(encoding, language))
     if protocol := analysis.get("protocol_guess"):
         parts.append(f"rc-switch P{protocol}")
+    if hex_code := analysis.get("hex"):
+        bit_count = analysis.get("bit_count")
+        parts.append(f"{hex_code} ({bit_count} Bit)" if german and bit_count
+                     else f"{hex_code} ({bit_count} bit)" if bit_count
+                     else hex_code)
+    if tristate := analysis.get("tristate"):
+        parts.append(f"Tri-State {tristate}")
+    if not analysis.get("encoding"):
+        parts.append("Raw")
+        if unit := analysis.get("base_unit_us"):
+            parts.append(f"~{unit} µs")
+
+    parts.append(
+        f"{analysis.get('pulse_count', 0)} {'Pulse' if german else 'pulses'}"
+    )
+    if (frames := analysis.get("frame_count", 0)) > 1:
+        parts.append(f"{frames} Frames")
+    if (variants := analysis.get("variants", 1)) > 1:
+        parts.append(f"{variants} Varianten" if german else f"{variants} variants")
     return " · ".join(parts)
+
+
+def signal_details(analysis: dict[str, Any], language: str = "en") -> str:
+    """Return a structured multi-line markdown summary of a signal.
+
+    Used by the learn wizard's confirmation step; ``analysis`` is the dict
+    produced by :func:`analyze` (or an equivalent subset for stored
+    commands).
+    """
+    german = language.lower().startswith("de")
+
+    if encoding := analysis.get("encoding"):
+        protocol = encoding_label(encoding, language)
+    else:
+        protocol = "Raw (nicht dekodiert)" if german else "Raw (not decoded)"
+    if guess := analysis.get("protocol_guess"):
+        protocol += f" · rc-switch P{guess}"
+    lines = [f"**{'Protokoll' if german else 'Protocol'}:** {protocol}"]
+
+    if hex_code := analysis.get("hex"):
+        code_line = f"`{hex_code}`"
+        if bit_count := analysis.get("bit_count"):
+            code_line += f" ({bit_count} {'Bit' if german else 'bit'})"
+        if tristate := analysis.get("tristate"):
+            code_line += f" · Tri-State `{tristate}`"
+        lines.append(f"**Code:** {code_line}")
+
+    timing_parts: list[str] = []
+    if unit := analysis.get("base_unit_us") or analysis.get("pulse_length"):
+        timing_parts.append(
+            f"{'Basispuls' if german else 'base pulse'} ~{unit} µs"
+        )
+    if pulses := analysis.get("pulse_count"):
+        timing_parts.append(f"{pulses} {'Pulse' if german else 'pulses'}")
+    if frames := analysis.get("frame_count"):
+        timing_parts.append(f"{frames} Frames")
+    if (seen := analysis.get("times_seen", 1)) > 1:
+        timing_parts.append(f"{seen}× {'empfangen' if german else 'received'}")
+    if timing_parts:
+        lines.append(f"**Timing:** {' · '.join(timing_parts)}")
+    return "\n".join(lines)
 
 
 def preview_timings(timings: list[int], limit: int = 20) -> str:
@@ -393,11 +453,11 @@ def tristate_to_bits(code: str) -> str:
     """Convert a PT2262/EV1527 tri-state code (0/1/F) into a bit string."""
     bits: list[str] = []
     for char in code.strip().upper():
-        if char not in _TRISTATE_TO_BITS:
+        if char not in TRISTATE_TO_BITS:
             raise RFInputError(
                 "invalid_tristate", f"Invalid tri-state character: {char!r}"
             )
-        bits.append(_TRISTATE_TO_BITS[char])
+        bits.append(TRISTATE_TO_BITS[char])
     if not bits:
         raise RFInputError("invalid_tristate", "Empty tri-state code")
     return "".join(bits)

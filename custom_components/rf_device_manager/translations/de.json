@@ -137,7 +137,7 @@
       },
       "slot_learn_done": {
         "title": "Signal auswählen",
-        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nWähle das Signal aus, das zu deinem Tastendruck gehört. Aktiviere „Nur testen“, um das gewählte Signal zu senden, ohne es schon zu übernehmen.\n\n{test_note}",
+        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nDie Liste ist nach Empfangshäufigkeit sortiert – der oberste Eintrag ist meist der richtige. Wähle das Signal aus, das zu deinem Tastendruck gehört. Aktiviere „Nur testen“, um das gewählte Signal zu senden, ohne es schon zu übernehmen.\n\n{test_note}",
         "data": {
           "signal": "Empfangenes Signal",
           "test": "Nur testen (gewähltes Signal senden, noch nicht übernehmen)"

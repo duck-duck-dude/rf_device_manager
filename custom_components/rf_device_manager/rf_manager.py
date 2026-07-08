@@ -478,13 +478,59 @@ class ReceiverHub:
 # ---------------------------------------------------------------------------
 
 
+def _cluster_learn_signals(
+    signals: list[CapturedSignal], max_signals: int
+) -> list[CapturedSignal]:
+    """Group captures that carry the same RF code and rank by frequency.
+
+    Real button presses repeat their frame many times while 433 MHz noise
+    and neighbouring devices produce one-off captures, so after clustering
+    (identical decoded bits, or dominant frames within timing tolerance)
+    the wanted signal reliably sorts to the top.
+    """
+    clusters: list[list[CapturedSignal]] = []
+    for signal in signals:
+        for cluster in clusters:
+            if rf_analysis.same_code(cluster[0].analysis, signal.analysis):
+                cluster.append(signal)
+                break
+        else:
+            clusters.append([signal])
+
+    merged: list[CapturedSignal] = []
+    for cluster in clusters:
+        representative = max(
+            cluster,
+            key=lambda sig: (
+                sig.analysis.get("times_seen", 1),
+                sig.analysis.get("frame_length", 0),
+            ),
+        )
+        representative.analysis["times_seen"] = sum(
+            sig.analysis.get("times_seen", 1) for sig in cluster
+        )
+        if len(cluster) > 1:
+            representative.analysis["variants"] = len(cluster)
+        merged.append(representative)
+
+    merged.sort(
+        key=lambda sig: (
+            sig.analysis.get("times_seen", 1),
+            sig.analysis.get("frame_length", 0),
+        ),
+        reverse=True,
+    )
+    return merged[:max_signals]
+
+
 @dataclass
 class LearnSession:
-    """One learning pass: wait for signals, collect, deduplicate.
+    """One learning pass: wait for signals, collect, cluster.
 
     ``async_capture`` blocks until the first signal arrives (or the timeout
-    expires), then keeps collecting for a short window so button repeats and
-    neighbouring codes show up as a selectable list.
+    expires), then keeps collecting for a short window. Captures are first
+    deduplicated by exact fingerprint, then clustered by code similarity so
+    jittery repeats of the same button collapse into one entry.
     """
 
     hub: ReceiverHub
@@ -497,6 +543,7 @@ class LearnSession:
         """Capture signals; raises ``TimeoutError`` when nothing is received."""
         first_signal = asyncio.Event()
         seen: dict[str, CapturedSignal] = {}
+        raw_capacity = self.max_signals * 3
 
         @callback
         def _collect(signal: CapturedSignal) -> None:
@@ -506,7 +553,7 @@ class LearnSession:
                     existing.analysis.get("times_seen", 1) + 1
                 )
                 return
-            if len(self.signals) >= self.max_signals:
+            if len(self.signals) >= raw_capacity:
                 return
             signal.analysis.setdefault("times_seen", 1)
             seen[key] = signal
@@ -521,9 +568,7 @@ class LearnSession:
         finally:
             unsubscribe()
 
-        self.signals.sort(
-            key=lambda sig: sig.analysis.get("times_seen", 1), reverse=True
-        )
+        self.signals = _cluster_learn_signals(self.signals, self.max_signals)
         return self.signals
 
 

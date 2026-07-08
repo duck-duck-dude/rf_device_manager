@@ -137,7 +137,7 @@
       },
       "slot_learn_done": {
         "title": "Select signal",
-        "description": "Several different signals were received for **{slot}**:\n\n{signals}\n\nSelect the one matching your button press. Enable “Test only” to transmit the selected signal without saving it yet.\n\n{test_note}",
+        "description": "Several different signals were received for **{slot}**:\n\n{signals}\n\nThe list is sorted by how often each signal was received – the top entry is usually the right one. Select the one matching your button press. Enable “Test only” to transmit the selected signal without saving it yet.\n\n{test_note}",
         "data": {
           "signal": "Received signal",
           "test": "Test only (send selected signal, do not save yet)"

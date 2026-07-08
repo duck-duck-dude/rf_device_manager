@@ -30,9 +30,10 @@ generic RF device manager.
   transmitters (ESPHome ir_rf_proxy, Broadlink RM4 Pro, …) with frequency
   validation.
 - **Learning wizard**: step-by-step per command, progress display
-  ("Waiting for RF signal…"), multi-signal selection with decoded previews
-  (pulses, base unit, bits, hex, tri-state, rc-switch protocol guess) and
-  live testing before saving.
+  ("Waiting for RF signal…"), automatic **signal clustering** (jittery
+  repeats of the same button collapse into one entry, ranked by how often
+  it was received), decoded previews (protocol, bits, hex, tri-state,
+  rc-switch protocol guess) and live testing before saving.
 - **Manual entry**: raw timings, tri-state (PT2262/EV1527), binary with
   rc-switch protocols 1–8, Pronto hex — everything is normalized to raw
   timings internally.
@@ -136,6 +137,78 @@ remote_receiver:
 Codes can be edited, re-learned per command, tested, disabled or deleted at
 any time via *Manage RF codes*. Device base settings are also available via
 **Reconfigure**.
+
+## 🧠 Protocol detection
+
+The integration does **not** need to know a remote's protocol: every signal
+is captured, stored and re-transmitted as **raw microsecond timings**, so
+any fixed-code remote works even when its protocol is completely unknown.
+
+On top of that, a decoder chain recognizes the *structural encoding
+patterns* used by virtually all sub-GHz OOK remotes and shows the result in
+the UI — in the learning wizard (signal list + confirmation step) and
+permanently in each entity's `commands` attribute:
+
+| Encoding | Structure | Typical devices |
+|---|---|---|
+| **Space distance** | constant mark, short/long space | EV1527, PT2262, most cheap 433 MHz remotes |
+| **Pulse width** | constant space, short/long mark | SIRC-style remotes |
+| **PWM (rc-switch)** | mark *and* space share the bit | rc-switch protocols 1–8 (guess included) |
+| **Manchester** | every bit is a level transition | Oregon sensors, some fan remotes |
+
+Because detection is structural, *new/unknown protocols within these
+patterns decode automatically*. Signals that match no pattern still work
+via the raw fallback — they just show as "Raw" with timing statistics.
+
+Decoded bits also power the jitter-immune **fingerprints** used to cluster
+signals while learning and to match incoming signals for (binary) sensors.
+
+> **Limitation:** rolling-code systems (KeeLoq, Somfy RTS, …) send a
+> different code on every press — record/replay cannot work for those by
+> design.
+
+## 🛠️ Extending the decoders
+
+All protocol recognition lives in one place:
+[`custom_components/rf_device_manager/decoders.py`](custom_components/rf_device_manager/decoders.py).
+It is pure Python (no Home Assistant imports) and every decoder documents
+its waveform, so the file doubles as the reference for *how* each encoding
+is decoded.
+
+Adding support for a new encoding:
+
+```python
+# decoders.py
+def _decode_my_encoding(context: FrameContext) -> DecodedFrame | None:
+    """Document the waveform here (see the existing decoders)."""
+    ...  # return None unless the frame *cleanly* matches your pattern
+    return DecodedFrame(encoding="my_encoding", bits=bits, pulse_length=unit)
+
+DECODERS = (
+    ...,
+    ("my_encoding", _decode_my_encoding),  # order = priority, see comment
+)
+
+ENCODINGS["my_encoding"] = EncodingInfo(
+    key="my_encoding", name_en="My encoding", name_de="Meine Kodierung"
+)
+```
+
+Then add a test case in [`tests/test_decoders.py`](tests/test_decoders.py) —
+ideally from a real ESPHome `remote_receiver` log line (the EV1527 test in
+there was captured exactly that way). New rc-switch timing profiles for
+manual entry are a one-line addition to the `RC_PROTOCOLS` table.
+
+### Development / tests
+
+The decoder pipeline is testable without a Home Assistant installation:
+
+```bash
+python tests/test_decoders.py
+```
+
+The same tests run in CI (`.github/workflows/validate.yaml`) alongside
+hassfest and HACS validation.
 
 ## 🔧 Services
 
