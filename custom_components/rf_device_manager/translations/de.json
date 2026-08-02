@@ -149,6 +149,7 @@
         "data": {
           "input_format": "Datenformat",
           "raw_timings": "Roh-Timings (µs, z. B. [350, -1050, …])",
+          "b0_code": "Tasmota-RfRaw-Code (AA B0 … 55)",
           "tristate_code": "Tri-State-Code (0/1/F)",
           "binary_code": "Binärcode (0/1)",
           "pronto_code": "Pronto-Hex-Code",
@@ -181,12 +182,17 @@
         "title": "RF-Code verwalten",
         "description": "**{code_name}** ({entity_type}) {enabled}\nBefehle: {slots}\n\n{test_note}",
         "menu_options": {
+          "code_view": "Details ansehen",
           "code_edit": "Bearbeiten (Name, Icon, Wiederholungen)",
           "code_relearn": "Befehl neu anlernen",
           "code_test": "Befehl testen",
           "code_toggle": "Aktivieren/Deaktivieren",
           "code_delete": "Löschen"
         }
+      },
+      "code_view": {
+        "title": "RF-Code Details",
+        "description": "**{code_name}** ({entity_type}) {enabled}\nBeschreibung: {description}\n\n{commands}\n\nZum Zurückgehen bestätigen – über „Befehl neu anlernen“ lässt sich ein Befehl überarbeiten."
       },
       "code_edit": {
         "title": "RF-Code bearbeiten",
@@ -228,6 +234,7 @@
       "invalid_tristate": "Tri-State-Codes dürfen nur 0, 1 und F enthalten.",
       "invalid_binary": "Binärcodes dürfen nur 0 und 1 enthalten.",
       "invalid_pronto": "Der Pronto-Code konnte nicht gelesen werden.",
+      "invalid_b0": "Der Tasmota-RfRaw-Code konnte nicht gelesen werden. Erwartet: AA B0 … 55.",
       "invalid_protocol": "Unbekanntes rc-switch-Protokoll.",
       "invalid_pulse_length": "Ungültige Pulslänge.",
       "no_transmitters": "Keine RF-Sender gefunden.",
@@ -261,6 +268,7 @@
     "input_format": {
       "options": {
         "raw": "Roh-Timings (µs)",
+        "b0": "Tasmota RfRaw (B0/B1)",
         "tristate": "Tri-State (PT2262/EV1527)",
         "binary": "Binär + rc-switch-Protokoll",
         "pronto": "Pronto-Hex"
@@ -346,6 +354,10 @@
         "timings": {
           "name": "Roh-Timings",
           "description": "Signierte Mikrosekunden-Timings (JSON-Array oder getrennte Zahlen)."
+        },
+        "b0_code": {
+          "name": "Tasmota-RfRaw-Code",
+          "description": "Tasmota/Portisch-RfRaw-B0-/B1-Bucket-Code (AA B0 … 55)."
         },
         "tristate_code": {
           "name": "Tri-State-Code",

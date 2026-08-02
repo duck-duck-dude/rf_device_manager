@@ -149,6 +149,7 @@
         "data": {
           "input_format": "Data format",
           "raw_timings": "Raw timings (µs, e.g. [350, -1050, …])",
+          "b0_code": "Tasmota RfRaw code (AA B0 … 55)",
           "tristate_code": "Tri-state code (0/1/F)",
           "binary_code": "Binary code (0/1)",
           "pronto_code": "Pronto hex code",
@@ -181,12 +182,17 @@
         "title": "Manage RF code",
         "description": "**{code_name}** ({entity_type}) {enabled}\nCommands: {slots}\n\n{test_note}",
         "menu_options": {
+          "code_view": "View details",
           "code_edit": "Edit (name, icon, repeats)",
           "code_relearn": "Learn command again",
           "code_test": "Test command",
           "code_toggle": "Enable/disable",
           "code_delete": "Delete"
         }
+      },
+      "code_view": {
+        "title": "RF code details",
+        "description": "**{code_name}** ({entity_type}) {enabled}\nDescription: {description}\n\n{commands}\n\nSubmit to go back – use “Learn command again” to rework a command."
       },
       "code_edit": {
         "title": "Edit RF code",
@@ -228,6 +234,7 @@
       "invalid_tristate": "Tri-state codes may only contain 0, 1 and F.",
       "invalid_binary": "Binary codes may only contain 0 and 1.",
       "invalid_pronto": "The Pronto code could not be parsed.",
+      "invalid_b0": "The Tasmota RfRaw code could not be parsed. Expected AA B0 … 55.",
       "invalid_protocol": "Unknown rc-switch protocol.",
       "invalid_pulse_length": "Invalid pulse length.",
       "no_transmitters": "No RF transmitters found.",
@@ -261,6 +268,7 @@
     "input_format": {
       "options": {
         "raw": "Raw timings (µs)",
+        "b0": "Tasmota RfRaw (B0/B1)",
         "tristate": "Tri-state (PT2262/EV1527)",
         "binary": "Binary + rc-switch protocol",
         "pronto": "Pronto hex"
@@ -346,6 +354,10 @@
         "timings": {
           "name": "Raw timings",
           "description": "Signed microsecond timings (JSON array or separated numbers)."
+        },
+        "b0_code": {
+          "name": "Tasmota RfRaw code",
+          "description": "Tasmota/Portisch RfRaw B0 or B1 bucket code (AA B0 … 55)."
         },
         "tristate_code": {
           "name": "Tri-state code",

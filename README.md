@@ -34,9 +34,10 @@ generic RF device manager.
   repeats of the same button collapse into one entry, ranked by how often
   it was received), decoded previews (protocol, bits, hex, tri-state,
   rc-switch protocol guess) and live testing before saving.
-- **Manual entry**: raw timings, tri-state (PT2262/EV1527), binary with
-  rc-switch protocols 1–8, Pronto hex — everything is normalized to raw
-  timings internally.
+- **Manual entry**: raw timings, **Tasmota/Portisch RfRaw B0/B1** bucket
+  codes (`AA B0 … 55`), tri-state (PT2262/EV1527), binary with rc-switch
+  protocols 1–8, Pronto hex — everything is normalized to raw timings
+  internally.
 - **9 entity types**: switch, light (stepped brightness), fan (speeds,
   oscillation, direction), cover (open/close/stop), button, select, number,
   plus sensor and binary sensor (**receive-side** via fingerprint matching,
@@ -162,6 +163,13 @@ via the raw fallback — they just show as "Raw" with timing statistics.
 
 Decoded bits also power the jitter-immune **fingerprints** used to cluster
 signals while learning and to match incoming signals for (binary) sensors.
+
+**Sending** replays the captured timings exactly as received (only
+normalized: sign convention, glitch removal, idle trim — no rotation,
+quantization or "cleaning") and repeats them, by default 8 times on air
+like briefly holding the remote button, since OOK receivers only accept a
+code after several identical frames. The repeat count can be overridden per
+code, per device or per service call.
 
 > **Limitation:** rolling-code systems (KeeLoq, Somfy RTS, …) send a
 > different code on every press — record/replay cannot work for those by

@@ -91,6 +91,7 @@ CONF_BINARY_CODE = "binary_code"
 CONF_PRONTO_CODE = "pronto_code"
 CONF_PULSE_LENGTH = "pulse_length"
 CONF_RC_PROTOCOL = "rc_protocol"
+CONF_B0_CODE = "b0_code"
 
 # Type-specific settings keys
 CONF_HAS_OFF = "has_off"
@@ -115,9 +116,11 @@ PROTOCOL_RAW = "raw"
 PROTOCOL_TRISTATE = "tristate"
 PROTOCOL_BINARY = "binary"
 PROTOCOL_PRONTO = "pronto"
+PROTOCOL_B0 = "b0"  # Tasmota RfRaw B0/B1 bucket format
 
 INPUT_FORMATS: list[str] = [
     PROTOCOL_RAW,
+    PROTOCOL_B0,
     PROTOCOL_TRISTATE,
     PROTOCOL_BINARY,
     PROTOCOL_PRONTO,
@@ -157,6 +160,12 @@ LEARN_MAX_SIGNALS = 8  # distinct signals kept per learning session
 MIN_SIGNAL_PULSES = 8  # ignore captures shorter than this many edges
 
 DEFAULT_REPEAT = 0  # extra repeats when re-sending a stored command
+
+# Effective repeats used when a command's repeat is 0/unset: real remotes
+# transmit their frame continuously while a button is held, and typical OOK
+# receivers only accept a code after several identical frames. 7 extra
+# repeats = 8 frames on air (~0.5-1 s), matching a short button press.
+DEFAULT_SEND_REPEAT = 7
 
 # Interval used by the receiver hub to (re-)attach to ESPHome API clients,
 # picking up reconnects and newly added nodes.

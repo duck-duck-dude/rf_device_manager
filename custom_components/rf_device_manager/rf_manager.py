@@ -41,6 +41,7 @@ from rf_protocols import ModulationType, RadioFrequencyCommand
 from . import rf_analysis
 from .const import (
     DEFAULT_LEARN_TIMEOUT,
+    DEFAULT_SEND_REPEAT,
     DOMAIN,
     ESPHOME_DOMAIN,
     ESPHOME_FALLBACK_EVENT,
@@ -614,10 +615,18 @@ class RFManager:
                 translation_key="transmitter_unavailable",
                 translation_placeholders={"transmitter": transmitter},
             )
+        # Send the captured timings exactly as received (only normalized:
+        # sign convention, glitch removal, idle trim). Real remotes and
+        # tools like Tasmota's RfRaw simply replay the raw waveform and let
+        # the transmitter repeat it a handful of times, so apply a sensible
+        # minimum repetition when the stored command has none.
+        effective_repeat = repeat if repeat is not None else command.repeat
+        if effective_repeat is None or effective_repeat <= 0:
+            effective_repeat = DEFAULT_SEND_REPEAT
         rf_command = _StoredCommand(
             frequency=frequency or command.frequency,
             timings=timings,
-            repeat_count=repeat if repeat is not None else command.repeat,
+            repeat_count=effective_repeat,
         )
         _LOGGER.debug(
             "Sending %d pulses at %d Hz via %s (repeat=%d)",

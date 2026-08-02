@@ -215,6 +215,37 @@ print(f"tri-state: decoded={tri_result.get('tristate')}")
 check(tri_result.get("tristate") == TRISTATE, "tri-state: round trip failed")
 
 # ---------------------------------------------------------------------------
+# 5. Tasmota RfRaw B0: a real working code from a Sonoff RF Bridge must
+#    decode to raw timings that analyze as the same space-distance code.
+# ---------------------------------------------------------------------------
+
+B0 = (
+    "AA B0 4C 04 08 0136 0AD2 0528 29EA "
+    "381808282808082828080828280808280828082808280828082808280828082828"
+    "082808082828082808082808280828082828080828082808280828082808282808 55"
+)
+b0_timings = rf_analysis.parse_tasmota_rfraw(B0)
+b0_analysis = rf_analysis.analyze(b0_timings)
+print(
+    f"RfRaw B0: {len(b0_timings)} pulses, encoding={b0_analysis.get('encoding')} "
+    f"bits={b0_analysis.get('bit_count')} hex={b0_analysis.get('hex')}"
+)
+check(len(b0_timings) >= 120, "B0: too few pulses decoded")
+marks = {v for v in b0_timings if v > 0}
+check(len(marks) == 1, f"B0: marks not constant ({sorted(marks)})")
+check(b0_analysis.get("encoding") == "space_distance", "B0: wrong encoding")
+check(
+    (b0_analysis.get("hex") or "").startswith("0x3332AAAB4D2AC"),
+    f"B0: unexpected code {b0_analysis.get('hex')}",
+)
+# Compact form without spaces must parse identically.
+check(
+    rf_analysis.parse_tasmota_rfraw(B0.replace(" ", ""))
+    == b0_timings,
+    "B0: compact (no-space) form parsed differently",
+)
+
+# ---------------------------------------------------------------------------
 
 if failures:
     print("\nFAILURES:")

@@ -509,6 +509,76 @@ def parse_timings_text(text: str) -> list[int]:
     return values
 
 
+def parse_tasmota_rfraw(text: str) -> list[int]:
+    """Parse a Tasmota/Portisch RfRaw ``B0``/``B1`` bucket code into timings.
+
+    Format (spaces optional, ``0x`` prefix tolerated)::
+
+        AA B0 <len> <nbucket> <repeats> <bucket_0..n> <data> 55   (compressed)
+        AA B1 <nbucket> <bucket_0..n> <data> 55                   (sniffed)
+
+    Each bucket is a 16-bit big-endian duration in microseconds. The data
+    section is a nibble stream; per nibble the low three bits index a
+    bucket and bit ``0x8`` selects the level: set = mark (carrier on),
+    clear = space. This is the exact form Tasmota's ``RfRaw`` and the
+    Sonoff RF Bridge (Portisch) emit, e.g.::
+
+        AA B0 4C 04 08 0136 0AD2 0528 29EA 3818082828... 55
+    """
+    compact = re.sub(r"(?i)^0x", "", text.strip().replace(",", " "))
+    compact = re.sub(r"\s+", "", compact)
+    if len(compact) % 2 != 0:
+        raise RFInputError("invalid_b0", "Odd number of hex digits")
+    try:
+        data = bytes.fromhex(compact)
+    except ValueError as err:
+        raise RFInputError("invalid_b0", f"Invalid hex: {err}") from err
+
+    if len(data) < 6 or data[0] != 0xAA or data[-1] != 0x55:
+        raise RFInputError(
+            "invalid_b0", "Expected an AA … 55 framed B0/B1 code"
+        )
+
+    command = data[1]
+    if command == 0xB0:
+        # data[2] = length, data[3] = bucket count, data[4] = repeats
+        nbucket = data[3]
+        pos = 5
+    elif command == 0xB1:
+        nbucket = data[2]
+        pos = 3
+    else:
+        raise RFInputError(
+            "invalid_b0", f"Unsupported RfRaw command 0x{command:02X}"
+        )
+
+    if not 1 <= nbucket <= 8 or pos + nbucket * 2 > len(data) - 1:
+        raise RFInputError("invalid_b0", "Invalid bucket count")
+    buckets = [
+        (data[pos + 2 * i] << 8) | data[pos + 2 * i + 1] for i in range(nbucket)
+    ]
+    pos += nbucket * 2
+
+    timings: list[int] = []
+    for byte in data[pos:-1]:
+        for nibble in (byte >> 4, byte & 0x0F):
+            index = nibble & 0x07
+            if index >= nbucket:
+                # A trailing zero nibble is padding; anything else is a fault.
+                if nibble == 0 and byte == data[-2]:
+                    continue
+                raise RFInputError(
+                    "invalid_b0", f"Bucket index {index} out of range"
+                )
+            duration = buckets[index]
+            timings.append(duration if nibble & 0x08 else -duration)
+
+    timings = normalize(timings)
+    if len(timings) < MIN_SIGNAL_PULSES:
+        raise RFInputError("too_few_pulses", "Decoded B0 signal too short")
+    return timings
+
+
 def parse_pronto(text: str) -> tuple[list[int], int]:
     """Parse a Pronto hex code into raw timings.
 

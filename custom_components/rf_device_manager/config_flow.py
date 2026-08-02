@@ -44,6 +44,7 @@ from homeassistant.helpers.selector import (
 
 from . import rf_analysis
 from .const import (
+    CONF_B0_CODE,
     CONF_BINARY_CODE,
     CONF_BRIGHTNESS_STEPS,
     CONF_DEFAULT_REPEAT,
@@ -92,6 +93,7 @@ from .const import (
     ENTITY_TYPES,
     FREQUENCY_PRESET_CUSTOM,
     FREQUENCY_PRESETS,
+    PROTOCOL_B0,
     PROTOCOL_BINARY,
     PROTOCOL_PRONTO,
     PROTOCOL_RAW,
@@ -911,6 +913,7 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
                     SelectSelectorConfig(
                         options=[
                             PROTOCOL_RAW,
+                            PROTOCOL_B0,
                             PROTOCOL_TRISTATE,
                             PROTOCOL_BINARY,
                             PROTOCOL_PRONTO,
@@ -920,6 +923,9 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Optional(CONF_RAW_TIMINGS): TextSelector(
+                    TextSelectorConfig(multiline=True)
+                ),
+                vol.Optional(CONF_B0_CODE): TextSelector(
                     TextSelectorConfig(multiline=True)
                 ),
                 vol.Optional(CONF_TRISTATE_CODE): TextSelector(),
@@ -972,6 +978,9 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
             timings = rf_analysis.parse_timings_text(
                 user_input.get(CONF_RAW_TIMINGS) or ""
             )
+        elif input_format == PROTOCOL_B0:
+            code_text = (user_input.get(CONF_B0_CODE) or "").strip()
+            timings = rf_analysis.parse_tasmota_rfraw(code_text)
         elif input_format == PROTOCOL_TRISTATE:
             code_text = (user_input.get(CONF_TRISTATE_CODE) or "").strip().upper()
             timings = rf_analysis.encode_tristate(
@@ -1186,6 +1195,7 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
         return self.async_show_menu(
             step_id="code_menu",
             menu_options=[
+                "code_view",
                 "code_edit",
                 "code_relearn",
                 "code_test",
@@ -1201,6 +1211,56 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
                 or "—",
                 "enabled": "✅" if code.enabled else "⏸",
                 "test_note": note,
+            },
+        )
+
+    async def async_step_code_view(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show a read-only detail view of every command of the code.
+
+        From here the user returns to the code menu to rework a command
+        (re-learn), rename or delete it.
+        """
+        code = self._selected_code()
+        if code is None:
+            return self.async_abort(reason="no_codes")
+        if user_input is not None:
+            return await self.async_step_code_menu()
+
+        german = self._language.lower().startswith("de")
+        if code.commands:
+            blocks: list[str] = []
+            for slot, command in code.commands.items():
+                analysis = {
+                    **command.extra,
+                    "pulse_count": len(command.data),
+                    "base_unit_us": command.pulse_length,
+                    "bit_count": command.extra.get("bit_count")
+                    or len(command.extra.get("bits", ""))
+                    or None,
+                    "tristate": command.extra.get("tristate")
+                    or (command.code if command.protocol == PROTOCOL_TRISTATE else None),
+                }
+                details = rf_analysis.signal_details(analysis, self._language)
+                indented = details.replace("\n", "\n  ")
+                blocks.append(
+                    f"### {slot_label(slot, self._language)}\n  {indented}\n"
+                    f"  **Timings:** `{rf_analysis.preview_timings(command.data)}`"
+                )
+            body = "\n\n".join(blocks)
+        else:
+            body = "*Noch keine Befehle.*" if german else "*No commands yet.*"
+
+        return self.async_show_form(
+            step_id="code_view",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "code_name": code.name,
+                "entity_type": code.entity_type,
+                "enabled": "✅" if code.enabled else "⏸",
+                "description": code.description or ("—"),
+                "commands": body,
             },
         )
 

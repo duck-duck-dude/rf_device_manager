@@ -35,6 +35,7 @@ from .const import (
     ATTR_TIMEOUT,
     ATTR_TIMINGS,
     ATTR_TRANSMITTER,
+    CONF_B0_CODE,
     CONF_BINARY_CODE,
     CONF_PRONTO_CODE,
     CONF_PULSE_LENGTH,
@@ -67,6 +68,7 @@ SEND_RAW_SCHEMA = vol.Schema(
             vol.Coerce(int), vol.Range(min=100_000_000, max=1_000_000_000)
         ),
         vol.Optional(ATTR_TIMINGS): cv.string,
+        vol.Optional(CONF_B0_CODE): cv.string,
         vol.Optional(CONF_TRISTATE_CODE): cv.string,
         vol.Optional(CONF_BINARY_CODE): cv.string,
         vol.Optional(CONF_PRONTO_CODE): cv.string,
@@ -153,6 +155,8 @@ async def _async_handle_send_raw(call: ServiceCall) -> None:
     try:
         if timings_text := call.data.get(ATTR_TIMINGS):
             timings = rf_analysis.parse_timings_text(timings_text)
+        elif b0_code := call.data.get(CONF_B0_CODE):
+            timings = rf_analysis.parse_tasmota_rfraw(b0_code)
         elif tristate := call.data.get(CONF_TRISTATE_CODE):
             timings = rf_analysis.encode_tristate(
                 tristate, pulse_length=pulse_length, protocol=rc_protocol
