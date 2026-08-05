@@ -68,18 +68,41 @@ ENTITY_DESCRIPTIONS: dict[str, EntityDescription] = {
 
 CodeEntityFactory = Callable[[RFDeviceCoordinator, RFCode], Entity]
 
+# Window during which an entity ignores received codes after it transmitted,
+# to avoid the receiver echoing our own signal back into the state.
+SELF_ECHO_SUPPRESS_S = 2.0
+
+# One remote press is transmitted as many repeated frames; collapse repeats of
+# the same slot within this window into a single reception.
+RECV_DEBOUNCE_S = 1.0
+
 
 class RFCodeEntity(CoordinatorEntity[RFDeviceCoordinator], RestoreEntity):
-    """Base entity backed by one stored RF code."""
+    """Base entity backed by one stored RF code.
+
+    Besides sending, every entity also *listens*: its command fingerprints
+    are registered with the shared :class:`CodeMatcher`, so when the same RF
+    code is received from outside Home Assistant (e.g. the physical remote),
+    ``_on_rf_match`` fires and the entity can reflect the external state
+    change. Send-only platforms override ``_on_rf_match`` to update their
+    optimistic state; receive-only platforms (sensor, binary_sensor) use it
+    as their primary state source.
+    """
 
     _attr_has_entity_name = True
     _attr_assumed_state = True
     _removing = False
+    _matcher_unsub: CALLBACK_TYPE | None = None
+    # Ignore received matches shortly after our own transmission, so the
+    # receiver hearing our own code does not clobber the optimistic state
+    # (matters for toggle-style devices whose off == on code).
+    _suppress_receive_until: float = 0.0
 
     def __init__(self, coordinator: RFDeviceCoordinator, code: RFCode) -> None:
         """Initialize from the coordinator snapshot and a code record."""
         super().__init__(coordinator)
         self._code_id = code.id
+        self._recv_debounce: dict[str, float] = {}
         self._attr_unique_id = code.unique_id
         self.entity_description = ENTITY_DESCRIPTIONS[code.entity_type]
         device = coordinator.data.device
@@ -170,7 +193,7 @@ class RFCodeEntity(CoordinatorEntity[RFDeviceCoordinator], RestoreEntity):
     # ------------------------------------------------------------------
 
     async def async_added_to_hass(self) -> None:
-        """Track the transmitter's availability for instant updates."""
+        """Track transmitter availability and register for received codes."""
         await super().async_added_to_hass()
         if self._requires_transmitter and self.rf_device.transmitter:
 
@@ -186,14 +209,86 @@ class RFCodeEntity(CoordinatorEntity[RFDeviceCoordinator], RestoreEntity):
                 )
             )
 
+        self._async_register_matcher()
+        self.async_on_remove(self._async_unregister_matcher)
+
+    # ------------------------------------------------------------------
+    # Receiving (external state changes via the shared CodeMatcher)
+    # ------------------------------------------------------------------
+
+    @callback
+    def _async_register_matcher(self) -> None:
+        """Register this code's command slots with the shared matcher."""
+        code = self.code
+        if code is None:
+            return
+        slots = [
+            (slot, command.fingerprint, command.extra.get("bits"))
+            for slot, command in code.commands.items()
+            if command.fingerprint or command.extra.get("bits")
+        ]
+        if not slots:
+            return
+        matcher = get_domain_data(self.hass).rf_manager.matcher
+        self._matcher_unsub = matcher.async_register(slots, self._handle_received)
+
+    @callback
+    def _async_unregister_matcher(self) -> None:
+        """Remove this entity's matcher registrations."""
+        if self._matcher_unsub is not None:
+            self._matcher_unsub()
+            self._matcher_unsub = None
+
+    @callback
+    def _handle_received(self, slot: str, signal: CapturedSignal) -> None:
+        """Handle an externally received code matching one of our slots."""
+        code = self.code
+        if code is None or not code.enabled:
+            return
+        now = self.hass.loop.time()
+        if now < self._suppress_receive_until:
+            return  # our own transmission echoed back on the receiver
+        if now - self._recv_debounce.get(slot, 0.0) < RECV_DEBOUNCE_S:
+            return  # a repeated frame of the same press
+        self._recv_debounce[slot] = now
+        _LOGGER.debug(
+            "RF match on %s: slot %s (%s)", self.entity_id, slot, signal.fingerprint
+        )
+        self.hass.bus.async_fire(
+            EVENT_CODE_RECEIVED,
+            {
+                "entity_id": self.entity_id,
+                "rf_device_id": code.device_id,
+                "code_id": code.id,
+                "code_name": code.name,
+                "slot": slot,
+                "source": signal.source,
+            },
+        )
+        self._on_rf_match(slot, signal)
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """React to an externally received code.
+
+        Default is a no-op (e.g. buttons). Platforms with state override this
+        to update their optimistic state from the matched slot.
+        """
+
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Self-remove when the code was deleted, otherwise refresh state."""
+        """Self-remove when deleted; re-sync matcher and refresh otherwise.
+
+        Re-registering on every coordinator update keeps the matcher in sync
+        after a command is (re-)learned, edited or removed.
+        """
         if self.code is None:
             if not self._removing:
                 self._removing = True
                 self.hass.async_create_task(self.async_remove(force_remove=True))
             return
+        self._async_unregister_matcher()
+        self._async_register_matcher()
         super()._handle_coordinator_update()
 
     # ------------------------------------------------------------------
@@ -222,6 +317,8 @@ class RFCodeEntity(CoordinatorEntity[RFDeviceCoordinator], RestoreEntity):
                     "name": self.code.name if self.code else self._code_id,
                 },
             )
+        # Ignore our own transmission if the receiver picks it up.
+        self._suppress_receive_until = self.hass.loop.time() + SELF_ECHO_SUPPRESS_S
         rf_manager = get_domain_data(self.hass).rf_manager
         await rf_manager.async_send(
             command, self.rf_device.transmitter, repeat=repeat
@@ -229,62 +326,13 @@ class RFCodeEntity(CoordinatorEntity[RFDeviceCoordinator], RestoreEntity):
 
 
 class RFReceiveCodeEntity(RFCodeEntity):
-    """Base for receive-side entities that match incoming RF signals.
+    """Base for receive-only entities (sensor, binary_sensor).
 
-    Subscribes to the receiver hub while added to Home Assistant; whenever a
-    capture's fingerprint matches one of the code's command slots,
-    ``_on_rf_match`` is invoked and ``rf_device_manager_code_received`` is
-    fired on the event bus for automations.
+    Receiving is handled by :class:`RFCodeEntity` via the shared
+    ``CodeMatcher``; these platforms simply override ``_on_rf_match`` to
+    turn a matched slot into their state. Kept as a distinct class to make
+    the receive-only intent explicit at the platform level.
     """
-
-    _hub_unsub: CALLBACK_TYPE | None = None
-
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to the receiver hub."""
-        await super().async_added_to_hass()
-        hub = get_domain_data(self.hass).rf_manager.hub
-        self._hub_unsub = hub.async_subscribe(self._handle_signal)
-        self.async_on_remove(self._async_unsubscribe_hub)
-
-    @callback
-    def _async_unsubscribe_hub(self) -> None:
-        """Detach from the receiver hub."""
-        if self._hub_unsub is not None:
-            self._hub_unsub()
-            self._hub_unsub = None
-
-    @callback
-    def _handle_signal(self, signal: CapturedSignal) -> None:
-        """Match an incoming capture against the code's fingerprints."""
-        code = self.code
-        if code is None or not code.enabled or signal.fingerprint is None:
-            return
-        for slot, command in code.commands.items():
-            if command.fingerprint and command.fingerprint == signal.fingerprint:
-                _LOGGER.debug(
-                    "RF match on %s: slot %s (%s)",
-                    self.entity_id,
-                    slot,
-                    signal.fingerprint,
-                )
-                self.hass.bus.async_fire(
-                    EVENT_CODE_RECEIVED,
-                    {
-                        "entity_id": self.entity_id,
-                        "rf_device_id": code.device_id,
-                        "code_id": code.id,
-                        "code_name": code.name,
-                        "slot": slot,
-                        "source": signal.source,
-                    },
-                )
-                self._on_rf_match(slot, signal)
-                return
-
-    @callback
-    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
-        """Handle a matched slot; implemented by receive platforms."""
-        raise NotImplementedError
 
 
 @callback

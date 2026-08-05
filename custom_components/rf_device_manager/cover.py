@@ -14,13 +14,13 @@ from homeassistant.components.cover import (
     CoverEntityFeature,
 )
 from homeassistant.const import STATE_CLOSED, STATE_OPEN
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_DEVICE_CLASS, ENTITY_TYPE_COVER
 from .coordinator import RFDeviceCoordinator, RFDeviceManagerConfigEntry
 from .entity_factory import RFCodeEntity, async_setup_code_platform
-from .models import RFCode, SLOT_CLOSE, SLOT_OPEN, SLOT_STOP
+from .models import CapturedSignal, RFCode, SLOT_CLOSE, SLOT_OPEN, SLOT_STOP
 
 PARALLEL_UPDATES = 1
 
@@ -65,19 +65,32 @@ class RFCover(RFCodeEntity, CoverEntity):
             self._attr_is_closed = False
 
     async def async_open_cover(self, **kwargs: Any) -> None:
-        """Send the open command."""
-        await self._async_send_slot(SLOT_OPEN)
+        """Send the open command (optimistic state first for instant UI)."""
         self._attr_is_closed = False
         self.async_write_ha_state()
+        await self._async_send_slot(SLOT_OPEN)
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Send the close command."""
-        await self._async_send_slot(SLOT_CLOSE)
         self._attr_is_closed = True
         self.async_write_ha_state()
+        await self._async_send_slot(SLOT_CLOSE)
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Send the stop command; the resulting position is unknown."""
-        await self._async_send_slot(SLOT_STOP)
         self._attr_is_closed = None
+        self.async_write_ha_state()
+        await self._async_send_slot(SLOT_STOP)
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """Reflect an external remote press in the cover state."""
+        if slot == SLOT_OPEN:
+            self._attr_is_closed = False
+        elif slot == SLOT_CLOSE:
+            self._attr_is_closed = True
+        elif slot == SLOT_STOP:
+            self._attr_is_closed = None
+        else:
+            return
         self.async_write_ha_state()

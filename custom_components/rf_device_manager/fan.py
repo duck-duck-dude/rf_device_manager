@@ -18,7 +18,7 @@ from homeassistant.components.fan import (
     FanEntity,
     FanEntityFeature,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util.percentage import (
     ordered_list_item_to_percentage,
@@ -29,6 +29,7 @@ from .const import ENTITY_TYPE_FAN
 from .coordinator import RFDeviceCoordinator, RFDeviceManagerConfigEntry
 from .entity_factory import RFCodeEntity, async_setup_code_platform
 from .models import (
+    CapturedSignal,
     RFCode,
     SLOT_DIRECTION_FORWARD,
     SLOT_DIRECTION_REVERSE,
@@ -102,15 +103,16 @@ class RFFan(RFCodeEntity, FanEntity):
     async def async_set_percentage(self, percentage: int) -> None:
         """Send the speed command closest to the requested percentage."""
         if percentage == 0 or not self._speed_slots:
-            await self._async_send_slot(SLOT_OFF)
             self._attr_percentage = 0
+            self.async_write_ha_state()  # optimistic state first
+            await self._async_send_slot(SLOT_OFF)
         else:
             slot = percentage_to_ordered_list_item(self._speed_slots, percentage)
-            await self._async_send_slot(slot)
             self._attr_percentage = ordered_list_item_to_percentage(
                 self._speed_slots, slot
             )
-        self.async_write_ha_state()
+            self.async_write_ha_state()
+            await self._async_send_slot(slot)
 
     async def async_turn_on(
         self,
@@ -125,25 +127,44 @@ class RFFan(RFCodeEntity, FanEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Send the off command."""
-        await self._async_send_slot(SLOT_OFF)
         self._attr_percentage = 0
         self.async_write_ha_state()
+        await self._async_send_slot(SLOT_OFF)
 
     async def async_oscillate(self, oscillating: bool) -> None:
         """Send the oscillation toggle command."""
-        await self._async_send_slot(SLOT_OSCILLATE)
         self._attr_oscillating = oscillating
         self.async_write_ha_state()
+        await self._async_send_slot(SLOT_OSCILLATE)
 
     async def async_set_direction(self, direction: str) -> None:
         """Send the matching direction command."""
+        self._attr_current_direction = (
+            DIRECTION_REVERSE if direction == DIRECTION_REVERSE else DIRECTION_FORWARD
+        )
+        self.async_write_ha_state()
         slot = (
             SLOT_DIRECTION_REVERSE
             if direction == DIRECTION_REVERSE
             else SLOT_DIRECTION_FORWARD
         )
         await self._async_send_slot(slot)
-        self._attr_current_direction = (
-            DIRECTION_REVERSE if direction == DIRECTION_REVERSE else DIRECTION_FORWARD
-        )
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """Reflect an external remote press in the fan state."""
+        if slot == SLOT_OFF:
+            self._attr_percentage = 0
+        elif slot in self._speed_slots:
+            self._attr_percentage = ordered_list_item_to_percentage(
+                self._speed_slots, slot
+            )
+        elif slot == SLOT_OSCILLATE:
+            self._attr_oscillating = not bool(self._attr_oscillating)
+        elif slot == SLOT_DIRECTION_FORWARD:
+            self._attr_current_direction = DIRECTION_FORWARD
+        elif slot == SLOT_DIRECTION_REVERSE:
+            self._attr_current_direction = DIRECTION_REVERSE
+        else:
+            return
         self.async_write_ha_state()

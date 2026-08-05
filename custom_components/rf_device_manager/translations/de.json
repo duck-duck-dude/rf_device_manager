@@ -135,12 +135,20 @@
           "slot_skip": "Diesen Befehl überspringen"
         }
       },
+      "slot_no_receiver": {
+        "title": "Kein RF-Empfänger verfügbar",
+        "description": "**Es wurde kein aktiver RF-Empfänger gefunden**, daher kann das Anlernen für **{slot}** nicht funktionieren.\n\nStelle sicher, dass ein ESPHome-Knoten mit einem `ir_rf_proxy`-radio_frequency-*Empfänger* online und in Reichweite ist, und versuche es erneut – oder gib den Code manuell ein.\n\nAktive Empfänger: {receivers}",
+        "menu_options": {
+          "slot_learn": "Erneut versuchen",
+          "slot_manual": "Code manuell eingeben",
+          "slot_skip": "Diesen Befehl überspringen"
+        }
+      },
       "slot_learn_done": {
         "title": "Signal auswählen",
-        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nDie Liste ist nach Empfangshäufigkeit sortiert – der oberste Eintrag ist meist der richtige. Wähle das Signal aus, das zu deinem Tastendruck gehört. Aktiviere „Nur testen“, um das gewählte Signal zu senden, ohne es schon zu übernehmen.\n\n{test_note}",
+        "description": "Für **{slot}** wurden mehrere unterschiedliche Signale empfangen:\n\n{signals}\n\nDie Liste ist nach Empfangshäufigkeit sortiert – der oberste Eintrag ist meist der richtige. Wähle das Signal aus, das zu deinem Tastendruck gehört; auf der nächsten Seite kannst du es testen und speichern.",
         "data": {
-          "signal": "Empfangenes Signal",
-          "test": "Nur testen (gewähltes Signal senden, noch nicht übernehmen)"
+          "signal": "Empfangenes Signal"
         }
       },
       "slot_manual": {

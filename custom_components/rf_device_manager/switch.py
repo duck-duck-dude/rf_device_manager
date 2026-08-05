@@ -14,10 +14,12 @@ from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from homeassistant.core import callback
+
 from .const import CONF_DEVICE_CLASS, ENTITY_TYPE_SWITCH
 from .coordinator import RFDeviceCoordinator, RFDeviceManagerConfigEntry
 from .entity_factory import RFCodeEntity, async_setup_code_platform
-from .models import RFCode, SLOT_OFF, SLOT_ON
+from .models import CapturedSignal, RFCode, SLOT_OFF, SLOT_ON
 
 PARALLEL_UPDATES = 1
 
@@ -54,14 +56,25 @@ class RFSwitch(RFCodeEntity, SwitchEntity):
             self._attr_is_on = last_state.state == STATE_ON
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Send the on command."""
-        await self._async_send_slot(SLOT_ON)
+        """Send the on command (optimistic state first for instant UI)."""
         self._attr_is_on = True
         self.async_write_ha_state()
+        await self._async_send_slot(SLOT_ON)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Send the off command (falls back to the on/toggle command)."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         slot = SLOT_OFF if self._command(SLOT_OFF) is not None else SLOT_ON
         await self._async_send_slot(slot)
-        self._attr_is_on = False
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """Reflect an external remote press in the switch state."""
+        if slot == SLOT_ON:
+            self._attr_is_on = True
+        elif slot == SLOT_OFF:
+            self._attr_is_on = False
+        else:
+            return
         self.async_write_ha_state()

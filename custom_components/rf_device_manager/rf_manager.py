@@ -574,6 +574,124 @@ class LearnSession:
 
 
 # ---------------------------------------------------------------------------
+# Received-code matcher
+# ---------------------------------------------------------------------------
+
+MatchCallback = Callable[[str, CapturedSignal], None]
+
+# A received code matches a stored one when their decoded bit strings differ
+# by at most this fraction of their length. Real receptions jitter and often
+# corrupt the last few (trailing/sync) bits, so an exact match misses many
+# genuine presses; this tolerance recovers them without matching unrelated
+# codes (different remotes differ in far more bits).
+_MATCH_BIT_TOLERANCE = 0.15
+
+
+@dataclass(slots=True)
+class _MatchEntry:
+    """One registered command slot to match received signals against."""
+
+    slot: str
+    fingerprint: str | None
+    bits: str | None
+    callback: MatchCallback
+
+
+class CodeMatcher:
+    """Routes received RF signals to the entities whose code they match.
+
+    Every entity registers its command slots here (and re-registers whenever
+    they change). A single hub subscription then routes each incoming capture
+    to the matching entities, so an external remote press updates the Home
+    Assistant entity state. Matching is tolerant: an exact fingerprint hit is
+    preferred, otherwise decoded bit strings are compared with a small Hamming
+    distance so jittery/partly-corrupted receptions still match.
+    """
+
+    def __init__(self, hub: ReceiverHub) -> None:
+        """Initialize the matcher on top of a receiver hub."""
+        self._hub = hub
+        self._entries: list[_MatchEntry] = []
+        self._hub_unsub: CALLBACK_TYPE | None = None
+
+    @callback
+    def async_register(
+        self,
+        slots: list[tuple[str, str | None, str | None]],
+        match_callback: MatchCallback,
+    ) -> CALLBACK_TYPE:
+        """Register an entity's slots as ``(slot, fingerprint, bits)`` tuples.
+
+        Returns a callback that removes exactly these registrations. The hub
+        subscription starts on the first registration and stops with the last.
+        """
+        added = [
+            _MatchEntry(slot, fingerprint, bits, match_callback)
+            for slot, fingerprint, bits in slots
+            if fingerprint or bits
+        ]
+        self._entries.extend(added)
+
+        if self._hub_unsub is None and self._entries:
+            self._hub_unsub = self._hub.async_subscribe(self._dispatch)
+
+        @callback
+        def _unregister() -> None:
+            for entry in added:
+                try:
+                    self._entries.remove(entry)
+                except ValueError:  # already gone
+                    pass
+            if not self._entries and self._hub_unsub is not None:
+                self._hub_unsub()
+                self._hub_unsub = None
+
+        return _unregister
+
+    @callback
+    def _dispatch(self, signal: CapturedSignal) -> None:
+        """Route a captured signal to the best-matching slot of each entity.
+
+        Crucially, at most **one** slot per entity is triggered per signal -
+        the closest match. Sibling buttons of one remote often differ by a
+        single bit, so a received code lands within tolerance of several
+        slots of the same entity; dispatching all of them would flip the
+        state back and forth (on/off/on/off) once per repeated frame.
+        """
+        fingerprint = signal.fingerprint
+        bits = signal.analysis.get("bits")
+
+        # callback (entity) -> (best distance, best entry)
+        best: dict[MatchCallback, tuple[int, _MatchEntry]] = {}
+        for entry in self._entries:
+            distance = self._match_distance(entry, fingerprint, bits)
+            if distance is None:
+                continue
+            current = best.get(entry.callback)
+            if current is None or distance < current[0]:
+                best[entry.callback] = (distance, entry)
+
+        for _distance, entry in best.values():
+            try:
+                entry.callback(entry.slot, signal)
+            except Exception:  # noqa: BLE001 - one bad handler must not break others
+                _LOGGER.exception("Error handling received RF code")
+
+    @staticmethod
+    def _match_distance(
+        entry: _MatchEntry, fingerprint: str | None, bits: str | None
+    ) -> int | None:
+        """Return the match distance (0 = exact) or ``None`` if no match."""
+        if entry.fingerprint and fingerprint and entry.fingerprint == fingerprint:
+            return 0
+        if bits and entry.bits and len(bits) == len(entry.bits):
+            distance = sum(a != b for a, b in zip(bits, entry.bits, strict=False))
+            if distance <= max(2, round(len(bits) * _MATCH_BIT_TOLERANCE)):
+                return distance
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Manager facade
 # ---------------------------------------------------------------------------
 
@@ -582,9 +700,10 @@ class RFManager:
     """Facade bundling transmit, receive and learn functionality."""
 
     def __init__(self, hass: HomeAssistant) -> None:
-        """Initialize the manager and its receiver hub."""
+        """Initialize the manager, its receiver hub and the code matcher."""
         self._hass = hass
         self.hub = ReceiverHub(hass)
+        self.matcher = CodeMatcher(self.hub)
 
     async def async_send(
         self,

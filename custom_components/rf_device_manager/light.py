@@ -12,13 +12,14 @@ from typing import Any
 
 from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
 from homeassistant.const import STATE_ON
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_BRIGHTNESS_STEPS, ENTITY_TYPE_LIGHT
 from .coordinator import RFDeviceCoordinator, RFDeviceManagerConfigEntry
 from .entity_factory import RFCodeEntity, async_setup_code_platform
 from .models import (
+    CapturedSignal,
     RFCode,
     SLOT_BRIGHTNESS_DOWN,
     SLOT_BRIGHTNESS_UP,
@@ -94,20 +95,33 @@ class RFLight(RFCodeEntity, LightEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the light on, optionally stepping to a brightness."""
-        if not self._attr_is_on:
+        was_on = self._attr_is_on
+        self._attr_is_on = True
+        self.async_write_ha_state()  # optimistic state first for instant UI
+        if not was_on:
             await self._async_send_slot(SLOT_ON)
-            self._attr_is_on = True
         if (
             (brightness := kwargs.get(ATTR_BRIGHTNESS)) is not None
             and self.code is not None
             and self._has_brightness_commands(self.code)
         ):
             await self._async_step_brightness(int(brightness))
-        self.async_write_ha_state()
+            self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the light off (falls back to the on/toggle command)."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
         slot = SLOT_OFF if self._command(SLOT_OFF) is not None else SLOT_ON
         await self._async_send_slot(slot)
-        self._attr_is_on = False
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """Reflect an external remote press in the light state."""
+        if slot == SLOT_ON:
+            self._attr_is_on = True
+        elif slot == SLOT_OFF:
+            self._attr_is_on = False
+        else:
+            return
         self.async_write_ha_state()

@@ -8,13 +8,13 @@ with discrete levels).
 from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity, NumberMode, RestoreNumber
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_NUMBER_MODE, CONF_UNIT, ENTITY_TYPE_NUMBER
 from .coordinator import RFDeviceCoordinator, RFDeviceManagerConfigEntry
 from .entity_factory import RFCodeEntity, async_setup_code_platform
-from .models import RFCode, SLOT_VALUE_PREFIX, format_number
+from .models import CapturedSignal, RFCode, SLOT_VALUE_PREFIX, format_number
 
 PARALLEL_UPDATES = 1
 
@@ -73,6 +73,17 @@ class RFNumber(RFCodeEntity, RestoreNumber, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Snap to the nearest configured value and send its command."""
         nearest = min(self._values, key=lambda candidate: abs(candidate - value))
-        await self._async_send_slot(f"{SLOT_VALUE_PREFIX}{format_number(nearest)}")
         self._attr_native_value = nearest
+        self.async_write_ha_state()  # optimistic state first for instant UI
+        await self._async_send_slot(f"{SLOT_VALUE_PREFIX}{format_number(nearest)}")
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """Reflect an external remote press in the number value."""
+        if not slot.startswith(SLOT_VALUE_PREFIX):
+            return
+        try:
+            self._attr_native_value = float(slot[len(SLOT_VALUE_PREFIX) :])
+        except ValueError:
+            return
         self.async_write_ha_state()

@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import ENTITY_TYPE_SELECT
 from .coordinator import RFDeviceCoordinator, RFDeviceManagerConfigEntry
 from .entity_factory import RFCodeEntity, async_setup_code_platform
-from .models import RFCode, SLOT_OPTION_PREFIX
+from .models import CapturedSignal, RFCode, SLOT_OPTION_PREFIX
 
 PARALLEL_UPDATES = 1
 
@@ -55,6 +55,16 @@ class RFSelect(RFCodeEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Send the command mapped to the chosen option."""
-        await self._async_send_slot(f"{SLOT_OPTION_PREFIX}{option}")
         self._attr_current_option = option
-        self.async_write_ha_state()
+        self.async_write_ha_state()  # optimistic state first for instant UI
+        await self._async_send_slot(f"{SLOT_OPTION_PREFIX}{option}")
+
+    @callback
+    def _on_rf_match(self, slot: str, signal: CapturedSignal) -> None:
+        """Reflect an external remote press in the selected option."""
+        if not slot.startswith(SLOT_OPTION_PREFIX):
+            return
+        option = slot[len(SLOT_OPTION_PREFIX) :]
+        if option in self._attr_options:
+            self._attr_current_option = option
+            self.async_write_ha_state()

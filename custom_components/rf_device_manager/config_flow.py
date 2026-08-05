@@ -730,6 +730,9 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
         """Choose how to provide the command for the current slot."""
         assert self._code is not None
         self._pending = None
+        # Refresh the receiver list so the menu (and the learn availability
+        # check) reflect the current state of the ESPHome nodes.
+        await get_domain_data(self.hass).rf_manager.hub.async_discover()
         spec = self._slots[self._slot_index]
         menu = ["slot_learn", "slot_manual"]
         if not spec.required or spec.key in self._code.commands:
@@ -746,6 +749,10 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
         """Listen for RF signals with a progress indicator."""
         if self._learn_task is None:
             rf_manager = get_domain_data(self.hass).rf_manager
+            # Learning needs a receiver; without one the wait is pointless.
+            await rf_manager.hub.async_discover()
+            if not rf_manager.hub.async_receiver_names():
+                return await self.async_step_slot_no_receiver()
             session = rf_manager.new_learn_session()
             self._signals = []
             self._learn_task = self.hass.async_create_task(session.async_capture())
@@ -789,25 +796,42 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
             description_placeholders=self._slot_placeholders(),
         )
 
+    async def async_step_slot_no_receiver(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """No RF receiver is available: warn and offer alternatives.
+
+        Learning cannot work without a receiver, so instead of waiting for a
+        signal that can never arrive, the user is warned and can retry (after
+        fixing the ESPHome node), enter the code manually, or skip.
+        """
+        assert self._code is not None
+        spec = self._slots[self._slot_index]
+        menu = ["slot_learn", "slot_manual"]
+        if not spec.required or spec.key in self._code.commands:
+            menu.append("slot_skip")
+        return self.async_show_menu(
+            step_id="slot_no_receiver",
+            menu_options=menu,
+            description_placeholders=self._slot_placeholders(),
+        )
+
     async def async_step_slot_learn_done(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Let the user pick one of the captured signals (with live test)."""
+        """Let the user pick one of the captured signals.
+
+        A single capture skips straight to the confirmation step. Otherwise
+        the user selects one from the list; the following confirmation step
+        provides the "Test" and "Save" buttons (no toggle here).
+        """
         if len(self._signals) == 1 and user_input is None:
             self._async_build_pending(self._signals[0])
             return await self.async_step_slot_confirm()
 
-        selected = "0"
         if user_input is not None:
-            selected = user_input["signal"]
-            index = int(selected)
-            if user_input.get("test"):
-                # Send the selected signal once, then re-show the list.
-                await self._async_test_signal(index)
-            else:
-                self._test_note = ""
-                self._async_build_pending(self._signals[index])
-                return await self.async_step_slot_confirm()
+            self._async_build_pending(self._signals[int(user_input["signal"])])
+            return await self.async_step_slot_confirm()
 
         options = [
             SelectOptionDict(
@@ -825,42 +849,22 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
             f"{rf_analysis.describe_signal(signal.analysis, self._language)}"
             for index, signal in enumerate(self._signals)
         )
-        note, self._test_note = self._test_note, ""
         return self.async_show_form(
             step_id="slot_learn_done",
             data_schema=vol.Schema(
                 {
-                    vol.Required("signal", default=selected): SelectSelector(
+                    vol.Required("signal", default="0"): SelectSelector(
                         SelectSelectorConfig(
                             options=options, mode=SelectSelectorMode.LIST
                         )
                     ),
-                    vol.Required("test", default=False): BooleanSelector(),
                 }
             ),
             description_placeholders={
                 **self._slot_placeholders(),
                 "signals": summary,
-                "test_note": note,
             },
         )
-
-    async def _async_test_signal(self, index: int) -> None:
-        """Send a captured signal once so the user can verify it live."""
-        signal = self._signals[index]
-        device = self._device()
-        command = RFCommandData(
-            frequency=signal.frequency or device.frequency,
-            data=list(signal.timings),
-            repeat=device.default_repeat,
-        )
-        rf_manager = get_domain_data(self.hass).rf_manager
-        try:
-            await rf_manager.async_send(command, device.transmitter)
-        except Exception as err:  # noqa: BLE001 - shown inline, flow continues
-            self._test_note = f"❌ Signal {index + 1}: {err}"
-        else:
-            self._test_note = f"✅ Signal {index + 1}"
 
     @callback
     def _async_build_pending(self, signal: CapturedSignal) -> None:
@@ -1081,8 +1085,14 @@ class RFDeviceManagerOptionsFlow(OptionsFlow):
     async def async_step_slot_retry(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Discard the pending command and re-enter the slot menu."""
+        """Discard the pending command.
+
+        With several captured signals, return to the signal list so another
+        one can be tried; otherwise re-enter the slot menu.
+        """
         self._pending = None
+        if len(self._signals) > 1:
+            return await self.async_step_slot_learn_done()
         return await self.async_step_slot_menu()
 
     async def async_step_slot_skip(

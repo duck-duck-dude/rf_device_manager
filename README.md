@@ -42,9 +42,14 @@ generic RF device manager.
   oscillation, direction), cover (open/close/stop), button, select, number,
   plus sensor and binary sensor (**receive-side** via fingerprint matching,
   with auto-off).
-- **Receiving**: incoming signals from ESPHome RF receivers are decoded and
-  matched; every recognized signal fires the
-  `rf_device_manager_code_received` event for automations.
+- **Receiving & external state sync**: incoming signals from ESPHome RF
+  receivers are decoded and matched against every entity's learned codes via a
+  central fingerprint index. When a code is triggered from outside Home
+  Assistant (e.g. the physical remote), the matching entity updates its state
+  automatically — a switch flips, a cover opens, a fan changes speed — and the
+  `rf_device_manager_code_received` event fires for automations.
+- **Instant UI**: send actions update the entity state optimistically before
+  the RF transmission completes, so the dashboard reacts immediately.
 - **Services**: `send_code`, `send_raw`, `learn_code` (returns captured
   signals as response data).
 - **Repairs & diagnostics**: a missing transmitter raises a fixable issue
@@ -63,23 +68,83 @@ generic RF device manager.
   in Home Assistant — the integration discovers them automatically through
   the ESPHome API.
 
-### ESPHome example (CC1101, transmit + receive)
+## 🔌 Hardware: ESP32 + CC1101 (recommended)
+
+A cheap ESP32 with a CC1101 sub-GHz module makes a reliable 433 MHz
+transmitter *and* receiver. Wire it over SPI plus the two GDO pins:
+
+![ESP32 to CC1101 wiring](docs/img/Esp32_CC1101.png)
+
+<sub>Wiring diagram from the [SmartRC-CC1101-Driver-Lib](https://github.com/LSatan/SmartRC-CC1101-Driver-Lib) by Little S@tan.</sub>
+
+| CC1101 | ESP32 | Purpose |
+|---|---|---|
+| VCC | 3V3 | Power (never 5 V) |
+| GND | GND | Ground |
+| CSN / CS | GPIO5 | SPI chip select |
+| SCK | GPIO18 | SPI clock |
+| MOSI / SI | GPIO23 | SPI MOSI |
+| MISO / SO | GPIO19 | SPI MISO |
+| GDO0 | GPIO2 | TX data (transmitter pin) |
+| GDO2 | GPIO4 | RX data (receiver pin) |
+
+### ESPHome config (ESP-IDF, transmit + receive)
+
+This is a complete, working configuration for the wiring above:
 
 ```yaml
+esphome:
+  name: rf-link-cc1101
+  friendly_name: RF-Link CC1101
+
+esp32:
+  variant: esp32
+  framework:
+    type: esp-idf
+    advanced:
+      sram1_as_iram: true
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+spi:
+  clk_pin: GPIO18
+  mosi_pin: GPIO23
+  miso_pin: GPIO19
+
+cc1101:
+  id: cc1101_radio
+  cs_pin: GPIO5
+  frequency: 433.92MHz
+
 remote_transmitter:
   id: rf_tx
-  pin: GPIOXX
+  pin: GPIO2          # GDO0
   carrier_duty_percent: 100%
   on_transmit:
     then:
-      - cc1101.begin_tx: cc1101_radio
+      - cc1101.begin_tx
   on_complete:
     then:
-      - cc1101.begin_rx: cc1101_radio
+      - cc1101.begin_rx
 
 remote_receiver:
   id: rf_rx
-  pin: GPIOXX
+  pin: GPIO4          # GDO2
+  # Tame noise/overflow on busy 433 MHz bands (optional but recommended):
+  # filter: 150us
+  # idle: 4ms
+  # buffer_size: 2kb
 
 radio_frequency:
   - platform: ir_rf_proxy
@@ -91,6 +156,11 @@ radio_frequency:
     frequency: 433.92MHz
     remote_receiver_id: rf_rx
 ```
+
+The `cc1101` component requires an ESPHome build that ships it (external
+component or a recent ESPHome). The transmitter's `carrier_duty_percent`
+**must be 100 %** for RF, and `on_transmit`/`on_complete` switch the CC1101
+between TX and RX so it can both send and learn.
 
 ### Event fallback for learning (optional)
 

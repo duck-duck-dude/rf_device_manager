@@ -97,7 +97,8 @@ custom_components/rf_device_manager/
 ├─ storage.py             # RFDeviceStore (Store v1, delay-save, CRUD, Migration)
 ├─ rf_manager.py          # RFManager (Senden via radio_frequency-Helper, Transmitter-
 │                         #   Discovery), ReceiverHub (ESPHome-Subscribe + Bus-Fallback,
-│                         #   Re-Subscribe-Wartung), LearnSession (Sammelfenster, Dedupe)
+│                         #   Re-Subscribe-Wartung), CodeMatcher (fingerprint→Entity-Index
+│                         #   für Empfang externer Codes), LearnSession (Cluster+Ranking)
 ├─ device_manager.py      # CRUD Geräte/Codes, Registry-Sync, Duplizieren, Events
 ├─ coordinator.py         # RFDeviceCoordinator (DataUpdateCoordinator, push-basiert)
 ├─ entity_factory.py      # RFCodeEntity-Basis (CoordinatorEntity + RestoreEntity),
@@ -131,9 +132,17 @@ ESPHome-Transmitter. Verfügbarkeit der Entities folgt dem Transmitter-State
 Wiederholen → nächster Slot → Speichern im Store → Entities erscheinen live
 (Coordinator-Diff, kein Reload).
 
-**Empfangen (sensor/binary_sensor):** Hub aktiv, solange Empfangs-Codes existieren →
-Fingerprint-Match → State-Update + Bus-Event `rf_device_manager_code_received`
-(für Automationen) → optional Auto-Off (`off_delay`).
+**Empfangen (alle Entities):** Jede Entity registriert die Fingerprints ihrer
+Befehls-Slots beim zentralen `CodeMatcher` (fingerprint→Entity, O(1)-Lookup). Eine
+einzige Hub-Subscription routet empfangene Captures an die passende Entity →
+`_on_rf_match(slot, signal)` passt den Zustand an (Schalter kippt, Cover öffnet,
+Ventilatorstufe ändert sich …) + Bus-Event `rf_device_manager_code_received`. So
+werden auch externe Auslösungen (Original-Fernbedienung) in HA sichtbar;
+sensor/binary_sensor nutzen denselben Pfad als primäre Zustandsquelle (Binary
+Sensor optional mit Auto-Off `off_delay`).
+
+**Reaktionszeit:** Sende-Aktionen schreiben den optimistischen Zustand *vor* dem
+Await der Übertragung → sofortiges UI-Feedback.
 
 ## 5. Erweiterbarkeit
 
