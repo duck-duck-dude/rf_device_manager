@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/rf_device_manager/icon@2x.png" width="128" alt="RF Device Manager">
+  <img src="custom_components/rf_device_manager/brand/icon@2x.png" width="128" alt="RF Device Manager">
 </p>
 
 <h1 align="center">RF Device Manager</h1>
@@ -305,12 +305,23 @@ hassfest and HACS validation.
 
 ## 🖼️ Icon / branding
 
-The icons in `brand/rf_device_manager/` (256 px + 512 px) are prepared for
-the [home-assistant/brands](https://github.com/home-assistant/brands)
-repository: submit them via pull request to
-`custom_integrations/rf_device_manager/` (`icon.png`, `icon@2x.png`) — after
-the merge Home Assistant shows the icon automatically in the integrations
-dialog.
+The integration ships its own brand images in
+`custom_components/rf_device_manager/brand/`. Since Home Assistant 2026.3,
+custom integrations can provide icons and logos locally
+([announcement](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api)),
+so no pull request to
+[home-assistant/brands](https://github.com/home-assistant/brands) is needed —
+Home Assistant picks them up automatically after the integration is installed
+or updated (and HA restarted; a browser cache refresh may be needed).
+
+| File | Size | Used for |
+|---|---|---|
+| `icon.png` / `icon@2x.png` | 256 × 256 / 512 × 512 | Square icon (integration list, device pages, add-integration dialog) |
+| `logo.png` / `logo@2x.png` | 128 / 256 px high | Landscape logo (integration page), light theme |
+| `dark_logo.png` / `dark_logo@2x.png` | 128 / 256 px high | Landscape logo, dark theme |
+
+The icon works on both light and dark backgrounds, so there is no separate
+`dark_icon.png` (Home Assistant falls back to `icon.png`).
 
 ## 🏗️ Architecture
 

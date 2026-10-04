@@ -222,8 +222,8 @@ response data).
   CI `.github/workflows/validate.yaml`). Covers the real EV1527 capture,
   Manchester jitter, rc-switch, tri-state, B0. **Add a case whenever you touch
   decoding.**
-- CI also runs `hassfest` and HACS validation (`ignore: brands` until the icon
-  PR to home-assistant/brands is merged).
+- CI also runs `hassfest` and HACS validation (the HACS brands check passes via
+  the local `custom_components/rf_device_manager/brand/icon.png`).
 - No HA test harness in this repo; validate flows by reasoning + hassfest.
 
 ## Repo / workflow notes
@@ -231,8 +231,12 @@ response data).
 - Published at `github.com/Gifford47/rf_device_manager`. Git over HTTPS needs
   `git config http.sslBackend schannel` in this environment (corporate TLS).
 - Commit messages: do **not** add a Co-Authored-By trailer (user preference).
-- Brand icons live in `brand/rf_device_manager/` for a future
-  home-assistant/brands PR (256px + 512px).
+- Brand images live in `custom_components/rf_device_manager/brand/` (local
+  brand images, supported since HA 2026.3 — no home-assistant/brands PR).
+  Files: `icon.png` 256², `icon@2x.png` 512², `logo.png`/`logo@2x.png`
+  (128/256 px high, landscape), `dark_logo.png`/`dark_logo@2x.png`. Only these
+  filenames (plus `dark_icon*.png`) are served by HA; missing ones fall back
+  (`logo` → `icon`, `dark_*` → light variant).
 - `settings.json` in the repo root is local Claude Code permissions — gitignored,
   not part of the integration.
 

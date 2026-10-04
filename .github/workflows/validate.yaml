@@ -41,6 +41,3 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
-          # The brands check only passes once the icon PR to
-          # home-assistant/brands is merged (see brand/ directory).
-          ignore: brands
